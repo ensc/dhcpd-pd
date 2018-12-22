@@ -20,17 +20,21 @@
 
 #define _GNU_SOURCE
 
+#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <sysexits.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
 #include <signal.h>
+#include <poll.h>
+#include <sys/socket.h>
 
 #include <sys/random.h>
 #include <sys/ioctl.h>
@@ -101,6 +105,7 @@ struct dhcp6_request {
 enum dhcp_iaid_state {
 	IAID_STATE_INIT,
 	IAID_STATE_SOLICATE,
+	IAID_STATE_SOLICATE_RETRY,
 	IAID_STATE_ACTIVE,
 	IAID_STATE_RENEWAL,
 };
@@ -115,9 +120,12 @@ struct dhcp_iaid {
 
 	time_t		end_t;
 	time_t		renew_t;
-	time_t		exp_t;
+
+	uint64_t	base_t;
+	unsigned long	rt;
 
 	enum dhcp_iaid_state	state;
+	uint8_t			xmit_id[3];
 };
 
 enum dhcp_client_state {
@@ -143,6 +151,7 @@ struct dhcp_session {
 	size_t			num_iaid;
 
 	enum dhcp_client_state	state;
+	time_t			state_tm;
 };
 
 union x_sockaddr {
@@ -274,6 +283,7 @@ static bool request_add_option_uuid(struct dhcp_session const *ses,
 
 static int dhcp_session_reopen(struct dhcp_session *ses)
 {
+	int			ONE = 1;
 	int			fd;
 	int			idx;
 	struct ifreq		ifreq = {};
@@ -306,6 +316,13 @@ static int dhcp_session_reopen(struct dhcp_session *ses)
 		goto err;
 	}
 
+	rc = setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &ONE, sizeof ONE);
+	if (rc < 0) {
+		perror("setsockopt()");
+		rc = EX_OSFILE;
+		goto err;
+	}
+
 	idx = ifreq.ifr_ifindex;
 	addr.in6.sin6_scope_id = idx;
 
@@ -320,7 +337,7 @@ static int dhcp_session_reopen(struct dhcp_session *ses)
 	ses->fd    = fd;
 
 	ses->iaid[0] = (struct dhcp_iaid) {
-		.id	= 0,
+		.id	= 1,
 	};
 	ses->num_iaid = ARRAY_SIZE(ses->iaid);
 
@@ -436,44 +453,76 @@ static int send_request(struct dhcp_session *ses)
 	return 0;
 }
 
-static int dhcp_do_solicate(struct dhcp_session *ses)
+static bool request_add_option_elapsed_time(struct dhcp_session *ses,
+					    struct dhcp6_request *req)
+{
+	time_t		now;
+	uint16_t	tm16;
+	time_t		tm_delta;
+
+	now = time(NULL);
+	if (ses->state_tm == (time_t)-1) {
+		ses->state_tm = now;
+	}
+
+	tm_delta = now - ses->state_tm;
+	if (tm_delta > 0xffff)
+		tm_delta = 0xffff;
+
+	tm16 = htobe16(tm_delta);
+
+	return buffer_add_option(&req->buf, 8, &tm16, sizeof tm16);
+}
+
+static unsigned long rt_rand(unsigned long prev,
+			     unsigned int lo, unsigned int hi)
+{
+	long	v = random() % (hi - lo) + lo;
+
+	return prev * v / 100;
+}
+
+static uint64_t time_ms(void)
+{
+	uint64_t	now = time(NULL);
+
+	now *= 1000;
+
+	return now;
+}
+
+static int dhcp_solicate_send(struct dhcp_session *ses)
 {
 	size_t		num_iapd = 0;
+	uint64_t	now = time_ms();
 
 	if (!request_init(ses, &ses->req, 1) ||
-	    !request_add_option_uuid(ses, &ses->req)) {
+	    !request_add_option_uuid(ses, &ses->req) ||
+	    !request_add_option_elapsed_time(ses, &ses->req)) {
 		fprintf(stderr, "failed to create SOLICATE request\n");
 		return -1;
 	}
 
+	(void)buffer_init_subbuffer;
+
 	for (size_t i = 0; i < ses->num_iaid; ++i) {
-		struct dhcp6_buffer	req_pd;
-		struct dhcp6_buffer	req_opt;
-		struct dhcpv6_option_iaprefix	opt_iaprefix = {
-			.pref_lftm.v	= htobe32(0xffffffffu),
-			.valid_lftm.v	= htobe32(0xffffffffu),
-			.prefix_len	= ses->iaid[i].prefix_len,
-		};
+		struct dhcp_iaid		*iaid = &ses->iaid[i];
+
 		struct dhcpv6_option_iapd	opt_iapd = {
-			.id.v		= htobe32(ses->iaid[i].id),
-			.t1.v		= htobe32(ses->iaid[i].t1),
-			.t2.v		= htobe32(ses->iaid[i].t2),
+			.id.v		= htobe32(iaid->id),
+			.t1.v		= htobe32(iaid->t1),
+			.t2.v		= htobe32(iaid->t2),
 		};
 
-		if (ses->iaid[i].state != IAID_STATE_INIT)
+		if (iaid->state == IAID_STATE_SOLICATE &&
+		    iaid->base_t + iaid->rt <= now)
+			iaid->state = IAID_STATE_SOLICATE_RETRY;
+
+		if (iaid->state != IAID_STATE_INIT &&
+		    iaid->state != IAID_STATE_SOLICATE_RETRY)
 			continue;
 
-		_Static_assert(sizeof ses->iaid[i].addr == sizeof opt_iaprefix.prefix,
-			       "bad 'opt_iaprefix' layout\n");
-
-		memcpy(opt_iaprefix.prefix, &ses->iaid[i].addr,
-		       sizeof ses->iaid[i].addr);
-
-		if (!buffer_init_subbuffer(&ses->req.buf, &req_pd, 0) ||
-		    !buffer_init_subbuffer(&req_pd,  &req_opt, 4 + sizeof opt_iapd) ||
-		    !buffer_add_option(&req_opt, 26, &opt_iaprefix, sizeof opt_iaprefix) ||
-		    !buffer_add_raw(&req_pd, 25, &opt_iapd, sizeof opt_iapd, req_opt.len) ||
-		    !request_allocate(&ses->req, req_pd.len)) {
+		if (!buffer_add_option(&ses->req.buf, 25, &opt_iapd, sizeof opt_iapd)) {
 			fprintf(stderr, "failed to create PD for IAID#%zu\n", i);
 			return -1;
 		}
@@ -490,14 +539,225 @@ static int dhcp_do_solicate(struct dhcp_session *ses)
 		return -1;
 
 	for (size_t i = 0; i < ses->num_iaid; ++i) {
-		if (ses->iaid[i].state == IAID_STATE_INIT) {
-			ses->iaid[i].state = IAID_STATE_SOLICATE;
-			/* TODO: check RFC for recommended timeout */
-			ses->iaid[i].exp_t = time(NULL) + 5;
+		struct dhcp_iaid	*iaid = &ses->iaid[i];
+		bool			is_sent = false;
+
+		if (iaid->state == IAID_STATE_INIT) {
+			is_sent      = true;
+			iaid->rt     = rt_rand(1000, 100, 110);
+		} else if (iaid->state == IAID_STATE_SOLICATE_RETRY) {
+			is_sent      = true;
+			iaid->rt     = rt_rand(iaid->rt, 90, 110);
+
+			if (iaid->rt > 120000)
+				iaid->rt = rt_rand(120000, 90, 110);
+		}
+
+		if (is_sent) {
+			_Static_assert(sizeof iaid->xmit_id ==
+				       sizeof ses->req.xmit_id,
+				       "bad xmit-id layout");
+
+			memcpy(iaid->xmit_id, ses->req.xmit_id, sizeof iaid->xmit_id);
+			iaid->state  = IAID_STATE_SOLICATE;
+			iaid->base_t = now;
 		}
 	}
 
 	return 1;
+}
+
+enum dhcp_wait_result {
+	DHCP_WAIT_NONE,
+	DHCP_WAIT_SIGNAL,
+	DHCP_WAIT_RESPONSE,
+	DHCP_WAIT_TIMEOUT,
+};
+
+static enum dhcp_wait_result dhcp_wait(struct dhcp_session *ses, int sig_fd)
+{
+	uint64_t	next_iaid_tm = 0;
+	struct pollfd	fds[2];
+	struct pollfd	*pfd;
+	uint64_t	now = time_ms();
+	int		rc;
+	int		timeout;
+
+	for (size_t i = 0; i < ses->num_iaid; ++i) {
+		struct dhcp_iaid	*iaid = &ses->iaid[i];
+		uint64_t		exp_t;
+
+		switch (iaid->state) {
+		case  IAID_STATE_SOLICATE:
+			exp_t = iaid->base_t + iaid->rt;
+			break;
+
+		default:
+			exp_t = 0;
+			break;
+		}
+
+		if (next_iaid_tm == 0 || exp_t < next_iaid_tm)
+			next_iaid_tm = exp_t;
+	}
+
+	pfd = &fds[0];
+
+	*pfd++ = (struct pollfd) {
+		.fd	= sig_fd,
+		.events	= POLLIN,
+	};
+
+	if (next_iaid_tm == 0) {
+		timeout = -1;
+	} else {
+		uint64_t	delta_tm;
+
+		*pfd++ = (struct pollfd) {
+			.fd	= ses->fd,
+			.events	= POLLIN,
+		};
+
+		if (next_iaid_tm < now)
+			delta_tm = 0;
+		else
+			delta_tm = next_iaid_tm - now;
+
+		if ((uint64_t)(int)delta_tm != delta_tm)
+			delta_tm = INT_MAX;
+
+		timeout = delta_tm;
+	}
+
+	rc = poll(fds, pfd - &fds[0], timeout);
+	if (rc < 0) {
+		perror("poll()");
+		return DHCP_WAIT_TIMEOUT;
+	}
+
+	for (size_t i = pfd - &fds[0]; i > 0; --i) {
+		if (fds[i - 1].revents == 0)
+			continue;
+
+		if (fds[i - 1].fd == sig_fd)
+			return DHCP_WAIT_SIGNAL;
+
+		if (fds[i - 1].fd == ses->fd)
+			return DHCP_WAIT_RESPONSE;
+	}
+
+	return DHCP_WAIT_TIMEOUT;
+}
+
+static int dhcp_read_response(struct dhcp_session *ses)
+{
+	union {
+		struct dhcpv6_option_hdr	hdr;
+		unsigned char			buf[16*1024];
+	}			resp;
+	union x_sockaddr	peer_addr;
+	struct in6_addr		local_addr;
+	bool			have_local_addr = false;
+
+	union {
+		struct cmsghdr	align;
+		unsigned char	raw[1024];
+	}			cmbuf;
+
+	struct iovec		msg_vec = {
+		.iov_base	= resp,
+		.iov_len	= sizeof resp,
+	};
+	struct msghdr		msg = {
+		.msg_name	= &peer_addr,
+		.msg_namelen	= sizeof peer_addr,
+		.msg_iov	= &msg_vec,
+		.msg_iovlen	= 1,
+		.msg_control	= cmbuf.raw,
+		.msg_controllen	= sizeof cmbuf,
+	};
+
+	ssize_t			l;
+
+	l = recvmsg(ses->fd, &msg, 0);
+	if (l < 0) {
+		perror("recvmsg()");
+	}
+
+	/* TODO: this check might violate the DHCPv6 RFC */
+	if (l >= sizeof resp) {
+		fprintf(stderr, "response too large\n");
+		return -1;
+	}
+
+	if (l < sizeof resp.hdr) {
+		fprintf(stderr, "response too small\n");
+		return -1;
+	}
+
+	for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+	     cmsg != NULL; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+
+		if (cmsg->cmsg_level == IPPROTO_IPV6 ||
+		    cmsg->cmsg_type  == IPV6_RECVPKTINFO) {
+			struct in6_pktinfo const	*info;
+
+			assert(cmsg->cmsg_len >= sizeof *info);
+
+			info = (void *)CMSG_DATA(cmsg);
+			/* sanity check: reject datagrams on unexpected
+			 * interfaces */
+			if (info->ipi6_ifindex != (unsigned int)ses->ifidx) {
+				fprintf(stderr, "bad ifidx\n");
+				continue;
+			}
+
+			_Static_assert(sizeof local_addr == sizeof info->ipi6_addr,
+				       "bad in6_pktinfo layout");
+
+			memcpy(&local_addr, &info->ipi6_addr, sizeof local_addr);
+			have_local_addr = true;
+		}
+
+		break;
+	}
+
+	if (!have_local_addr) {
+		fprintf(stderr, "failed to get local address from received datagram\n");
+		return -1;
+	}
+
+	/* sanity check: reject datagrams to non link-local addresses */
+	if (local_addr.s6_addr[0] != 0xfe || local_addr.s6_addr[1] != 0x80) {
+		char	tmp[INET6_ADDRSTRLEN];
+
+		fprintf(stderr, "non link-local destination address %s\n",
+			inet_ntop(AF_INET6, &local_addr, tmp, sizeof tmp));
+		return -1;
+	}
+
+	switch (be16toh(resp.hdr.option)) {
+	case 1:				/* SOLICIT */
+	case 3:				/* REQUEST */
+	case 4:				/* CONFIRM */
+	case 5:				/* RENEW */
+	case 6:				/* REBIND */
+	case 8:				/* RELEASE */
+	case 9:				/* DECLINE */
+	case 11:			/* INFORMATION-REQUEST */
+		/* echo'ed clinet messages? Ignore them silently*/
+		return 0;
+
+	case 2:				/* ADVERTISE */
+		return dhcp_handle_advertise(ses, &resp.hdr, l);
+
+	case 7:
+		return dhcp_handle_reply(ses, &resp.hdr, 1);
+
+		break;
+
+
+	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -535,14 +795,17 @@ int main(int argc, char *argv[])
 
 
 	for (;;) {
+		enum dhcp_wait_result	wait_res = DHCP_WAIT_NONE;
+
 		switch (session.state) {
 		case DHCP_CLNT_STATE_INIT:
 			session.state = DHCP_CLNT_STATE_SOLICATE_REQ;
+			session.state_tm = (time_t)-1;
 			rc = 0;
 			break;
 
 		case DHCP_CLNT_STATE_SOLICATE_REQ:
-			rc = dhcp_do_solicate(&session);
+			rc = dhcp_solicate_send(&session);
 			if (rc < 0) {
 				session.state = DHCP_CLNT_STATE_ERROR;
 			} else if (rc > 0) {
@@ -554,6 +817,7 @@ int main(int argc, char *argv[])
 			break;
 
 		case DHCP_CLNT_STATE_SOLICATE_RESP:
+			wait_res = dhcp_wait(&session, sig_fd);
 			/* TODO */
 			break;
 
@@ -567,6 +831,23 @@ int main(int argc, char *argv[])
 
 		if (session.state == DHCP_CLNT_STATE_ERROR)
 			break;
+
+		switch (wait_res) {
+		case DHCP_WAIT_RESPONSE:
+			rc = dhcp_read_response(&session);
+			break;
+
+		case DHCP_WAIT_NONE:
+			break;
+
+		case DHCP_WAIT_SIGNAL:
+			break;
+
+		case DHCP_WAIT_TIMEOUT:
+			fprintf(stderr, "timeout\n");
+			break;
+
+		}
 	}
 
 out:
