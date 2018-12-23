@@ -25,3 +25,8 @@ dhcpd-pd:	src/dhcpd-pd.c
 
 clean:
 	rm -f dhcpd-pd
+
+install:	.install-sbin
+
+.install-sbin:	dhcpd-pd
+	${INSTALL_BIN} -D $< ${DESTDIR}${sbindir}/dhcpd-pd
