@@ -48,48 +48,16 @@
 
 #include <openssl/sha.h>
 
-#define DUID_ENUM	22683
-#define DUID_SALT0	"kABoBaUjLjs9SebQUpUyadljIA1gvxV9"
-#define DUID_SALT1	"6SwjUAHolGTaFie7j6A2glABx93pnIkj"
-#define SERIAL_FILE_CPU	"/sys/firmware/devicetree/base/serial-number"
+#include "util.h"
+#include "dhcpv6.h"
+
+#define DUID_ENUM		22683
+#define DUID_SALT0		"kABoBaUjLjs9SebQUpUyadljIA1gvxV9"
+#define DUID_SALT1		"6SwjUAHolGTaFie7j6A2glABx93pnIkj"
+#define SERIAL_FILE_CPU		"/sys/firmware/devicetree/base/serial-number"
 #define SERIAL_FILE_MACHINE_ID	"/etc/machine-id"
 
-#define ARRAY_SIZE(_a)	((sizeof (_a)) / (sizeof (_a)[0]))
-
-struct be16 {
-	uint16_t	v;
-};
-typedef struct be16	be16_t;
-
-struct be32 {
-	uint32_t	v;
-};
-typedef struct be32	be32_t;
-
-#pragma pack(push)
-struct dhcpv6_hdr {
-	uint8_t		msg_type;
-	uint8_t		xmit_id[3];
-};
-
-struct dhcpv6_option_hdr {
-	be16_t		option;
-	be16_t		len;
-};
-
-struct dhcpv6_option_iapd {
-	be32_t		id;
-	be32_t		t1;
-	be32_t		t2;
-};
-
-struct dhcpv6_option_iaprefix {
-	be32_t		pref_lftm;
-	be32_t		valid_lftm;
-	uint8_t		prefix_len;
-	uint8_t		prefix[16];
-};
-#pragma pack(pop)
+#define TIME_INFINITY		((time_t)0)
 
 struct dhcp6_buffer {
 	void		*data;
@@ -115,14 +83,22 @@ struct dhcp_iaid {
 	unsigned long	t1;
 	unsigned long	t2;
 
+	unsigned long	pref_t1;
+	unsigned long	pref_t2;
+
 	struct in6_addr	addr;
 	unsigned char	prefix_len;
+
+	time_t		pref_tm;
+	time_t		valid_tm;
 
 	time_t		end_t;
 	time_t		renew_t;
 
 	uint64_t	base_t;
 	unsigned long	rt;
+
+	bool			addr_valid;
 
 	enum dhcp_iaid_state	state;
 	uint8_t			xmit_id[3];
@@ -143,6 +119,8 @@ struct dhcp_session {
 	int		ifidx;
 	unsigned char	duid[64];
 	size_t		duid_len;
+
+	time_t		now;
 
 	struct dhcp6_request	req;
 	unsigned char		req_buf[8192];
@@ -196,8 +174,8 @@ static bool buffer_add_raw(struct dhcp6_buffer *buf, unsigned int code,
 		return false;
 
 	*opt = (struct dhcpv6_option_hdr) {
-		.option.v	= htobe16(code),
-		.len.v		= htobe16(len + extra_len),
+		.option		= CPU_TO_BE16(code),
+		.len		= CPU_TO_BE16(len + extra_len),
 	};
 
 	if (data)
@@ -238,7 +216,7 @@ static bool request_init(struct dhcp_session *ses,
 			 struct dhcp6_request *req,
 			 unsigned int type)
 {
-	struct dhcpv6_hdr	*hdr;
+	struct dhcpv6_message_hdr	*hdr;
 
 	(void)ses;
 
@@ -257,7 +235,7 @@ static bool request_init(struct dhcp_session *ses,
 	if (!hdr)
 		return false;
 
-	hdr->msg_type = type;
+	hdr->type = type;
 	memcpy(hdr->xmit_id, req->xmit_id, sizeof req->xmit_id);
 
 	return true;
@@ -278,7 +256,8 @@ static bool request_add_option_uuid(struct dhcp_session const *ses,
 	if (ses->duid_len > sizeof ses->duid)
 		abort();
 
-	return buffer_add_option(&req->buf, 1, ses->duid, ses->duid_len);
+	return buffer_add_option(&req->buf, DHCPV6_OPTION_CLIENTID,
+				 ses->duid, ses->duid_len);
 }
 
 static int dhcp_session_reopen(struct dhcp_session *ses)
@@ -456,22 +435,21 @@ static int send_request(struct dhcp_session *ses)
 static bool request_add_option_elapsed_time(struct dhcp_session *ses,
 					    struct dhcp6_request *req)
 {
-	time_t		now;
 	uint16_t	tm16;
 	time_t		tm_delta;
 
-	now = time(NULL);
 	if (ses->state_tm == (time_t)-1) {
-		ses->state_tm = now;
+		ses->state_tm = ses->now;
 	}
 
-	tm_delta = now - ses->state_tm;
+	tm_delta = ses->now - ses->state_tm;
 	if (tm_delta > 0xffff)
 		tm_delta = 0xffff;
 
 	tm16 = htobe16(tm_delta);
 
-	return buffer_add_option(&req->buf, 8, &tm16, sizeof tm16);
+	return buffer_add_option(&req->buf, DHCPV6_OPTION_ELAPSED_TIME,
+				 &tm16, sizeof tm16);
 }
 
 static unsigned long rt_rand(unsigned long prev,
@@ -496,6 +474,8 @@ static int dhcp_solicate_send(struct dhcp_session *ses)
 	size_t		num_iapd = 0;
 	uint64_t	now = time_ms();
 
+	ses->now = now / 1000;
+
 	if (!request_init(ses, &ses->req, 1) ||
 	    !request_add_option_uuid(ses, &ses->req) ||
 	    !request_add_option_elapsed_time(ses, &ses->req)) {
@@ -509,9 +489,9 @@ static int dhcp_solicate_send(struct dhcp_session *ses)
 		struct dhcp_iaid		*iaid = &ses->iaid[i];
 
 		struct dhcpv6_option_iapd	opt_iapd = {
-			.id.v		= htobe32(iaid->id),
-			.t1.v		= htobe32(iaid->t1),
-			.t2.v		= htobe32(iaid->t2),
+			.id	= CPU_TO_BE32(iaid->id),
+			.t1	= CPU_TO_BE32(iaid->pref_t1),
+			.t2	= CPU_TO_BE32(iaid->pref_t2),
 		};
 
 		if (iaid->state == IAID_STATE_SOLICATE &&
@@ -522,7 +502,10 @@ static int dhcp_solicate_send(struct dhcp_session *ses)
 		    iaid->state != IAID_STATE_SOLICATE_RETRY)
 			continue;
 
-		if (!buffer_add_option(&ses->req.buf, 25, &opt_iapd, sizeof opt_iapd)) {
+		iaid->addr_valid = false;
+
+		if (!buffer_add_option(&ses->req.buf, DHCPV6_OPTION_IA_PD,
+				       &opt_iapd, sizeof opt_iapd)) {
 			fprintf(stderr, "failed to create PD for IAID#%zu\n", i);
 			return -1;
 		}
@@ -535,8 +518,16 @@ static int dhcp_solicate_send(struct dhcp_session *ses)
 	if (num_iapd == 0)
 		return 0;
 
-	if (send_request(ses) < 0)
+	if (send_request(ses) < 0) {
+		for (size_t i = 0; i < ses->num_iaid; ++i) {
+			struct dhcp_iaid	*iaid = &ses->iaid[i];
+
+			if (iaid->state == IAID_STATE_SOLICATE_RETRY)
+				iaid->state = IAID_STATE_SOLICATE;
+		}
+
 		return -1;
+	}
 
 	for (size_t i = 0; i < ses->num_iaid; ++i) {
 		struct dhcp_iaid	*iaid = &ses->iaid[i];
@@ -649,10 +640,159 @@ static enum dhcp_wait_result dhcp_wait(struct dhcp_session *ses, int sig_fd)
 	return DHCP_WAIT_TIMEOUT;
 }
 
+static time_t dhcp_relative_time(struct dhcp_session const *ses, be32_t tm)
+{
+	if (be32_to_cpu(tm) == 0xffffffff)
+		return TIME_INFINITY;
+	else
+		return ses->now + be32_to_cpu(tm);
+}
+
+static int dhcp_handle_ia_pd(struct dhcp_session *ses,
+			     struct dhcpv6_message_hdr const *msg,
+			     struct dhcpv6_option_hdr const *hdr)
+{
+	struct dhcpv6_option_iapd const		*opt_iapd;
+	struct dhcpv6_option_hdr const		*opt_first;
+	size_t					len;
+	struct dhcpv6_option_iaprefix const	*opt_prefix = NULL;
+	struct dhcp_iaid			*iapd = NULL;
+
+	opt_iapd  = dhcpv6_get_option_data(hdr);
+	len	  = be16_to_cpu(hdr->len) - sizeof *opt_iapd;
+	opt_first = dhcpv6_validated_option((void *)&opt_iapd[1], len);
+
+	if (!opt_first) {
+		fprintf(stderr, "bad IAPD layout; not embedded option\n");
+		return -1;
+	}
+
+	if (be32_to_cpu(opt_iapd->t1) > be32_to_cpu(opt_iapd->t2) &&
+	    be32_to_cpu(opt_iapd->t2) > 0) {
+		/* RFC 3633: If a requesting router receives an IA_PD with T1
+		   greater than T2, and both T1 and T2 are greater than 0, the
+		   client discards the IA_PD option and processes the
+		   remainder of the message as though the delegating router
+		   had not included the IA_PD option. */
+		return 0;
+	}
+
+	dhcpv6_foreach_option_next(opt, opt_first, &len) {
+		struct dhcpv6_option_iaprefix const	*tmp;
+
+		if (be16_to_cpu(opt->option) != DHCPV6_OPTION_IAPREFIX)
+			continue;
+
+		if (be16_to_cpu(opt->len) < sizeof *tmp) {
+			fprintf(stderr, "malformed IAPREFIX option\n");
+			return -1;
+		}
+
+		tmp = dhcpv6_get_option_data(opt);
+
+		if (opt_prefix && opt_prefix->prefix_len > tmp->prefix_len)
+			/* prefer the largest advertised prefix */
+			continue;
+
+		opt_prefix = tmp;
+	}
+
+	if (len > 0) {
+		fprintf(stderr, "extra data in IA_PD\n");
+		return -1;
+	}
+
+	if (!opt_prefix)
+		/* debug("no prefix advertised") */
+		return 0;
+
+	for (size_t i = 0; i < ses->num_iaid; ++i) {
+		struct dhcp_iaid	*tmp = &ses->iaid[i];
+
+		if (tmp->state != IAID_STATE_SOLICATE)
+			continue;
+
+		if (memcmp(tmp->xmit_id, msg->xmit_id, sizeof tmp->xmit_id) != 0)
+			continue;
+
+		if (be32_to_cpu(opt_iapd->id) != tmp->id)
+			continue;
+
+		if (iapd) {
+			fprintf(stderr, "IAPD option matching multiple IAPD\n");
+			return -1;
+		}
+
+		iapd = tmp;
+	}
+
+	if (!iapd) {
+		fprintf(stderr, "no matching IAPD\n");
+		return -1;
+	}
+
+	iapd->t1 = be32_to_cpu(opt_iapd->t1);
+	iapd->t2 = be32_to_cpu(opt_iapd->t2);
+
+	_Static_assert(sizeof iapd->addr == sizeof opt_prefix->prefix,
+		       "bad iapd->prefix layout");
+
+	memcpy(&iapd->addr, opt_prefix->prefix, sizeof iapd->addr);
+	iapd->prefix_len = opt_prefix->prefix_len;
+
+	iapd->pref_tm  = dhcp_relative_time(ses, opt_prefix->pref_lftm);
+	iapd->valid_tm = dhcp_relative_time(ses, opt_prefix->valid_lftm);
+
+	iapd->addr_valid = true;
+
+
+}
+
+static int dhcp_handle_advertise(struct dhcp_session *ses,
+				 struct dhcpv6_message_hdr const *msg,
+				 size_t len)
+{
+	int		rc;
+
+	dhcpv6_foreach_option(opt, msg, &len) {
+		switch (be16_to_cpu(opt->option)) {
+		case DHCPV6_OPTION_IA_PD:
+			rc = dhcp_handle_ia_pd(ses, msg, opt);
+			break;
+
+		default:
+			rc = 0;
+			break;
+		}
+
+		if (rc < 0)
+			break;
+	}
+
+	if (rc < 0)
+		goto out;
+
+	if (len != 0) {
+		fprintf(stderr, "extra data after last DHCP option\n");
+		return -1;
+	}
+
+	rc = 0;
+
+out:
+	return rc;
+}
+
+static int dhcp_handle_reply(struct dhcp_session *ses,
+			     struct dhcpv6_message_hdr const *hdr,
+			     size_t len)
+{
+}
+
 static int dhcp_read_response(struct dhcp_session *ses)
 {
 	union {
-		struct dhcpv6_option_hdr	hdr;
+		struct dhcpv6_message_hdr	hdr;
 		unsigned char			buf[16*1024];
 	}			resp;
 	union x_sockaddr	peer_addr;
@@ -665,7 +805,7 @@ static int dhcp_read_response(struct dhcp_session *ses)
 	}			cmbuf;
 
 	struct iovec		msg_vec = {
-		.iov_base	= resp,
+		.iov_base	= &resp,
 		.iov_len	= sizeof resp,
 	};
 	struct msghdr		msg = {
@@ -684,13 +824,15 @@ static int dhcp_read_response(struct dhcp_session *ses)
 		perror("recvmsg()");
 	}
 
+	ses->now = time(NULL);
+
 	/* TODO: this check might violate the DHCPv6 RFC */
-	if (l >= sizeof resp) {
+	if ((size_t)l >= sizeof resp) {
 		fprintf(stderr, "response too large\n");
 		return -1;
 	}
 
-	if (l < sizeof resp.hdr) {
+	if ((size_t)l < sizeof resp.hdr) {
 		fprintf(stderr, "response too small\n");
 		return -1;
 	}
@@ -736,28 +878,37 @@ static int dhcp_read_response(struct dhcp_session *ses)
 		return -1;
 	}
 
-	switch (be16toh(resp.hdr.option)) {
-	case 1:				/* SOLICIT */
-	case 3:				/* REQUEST */
-	case 4:				/* CONFIRM */
-	case 5:				/* RENEW */
-	case 6:				/* REBIND */
-	case 8:				/* RELEASE */
-	case 9:				/* DECLINE */
-	case 11:			/* INFORMATION-REQUEST */
+	switch (resp.hdr.type) {
+	case DHCPV6_TYPE_SOLICIT:
+	case DHCPV6_TYPE_REQUEST:
+	case DHCPV6_TYPE_CONFIRM:
+	case DHCPV6_TYPE_RENEW:
+	case DHCPV6_TYPE_REBIND:
+	case DHCPV6_TYPE_RELEASE:
+	case DHCPV6_TYPE_DECLINE:
+	case DHCPV6_TYPE_INFORMATION_REQUEST:
 		/* echo'ed clinet messages? Ignore them silently*/
 		return 0;
 
-	case 2:				/* ADVERTISE */
+	case DHCPV6_TYPE_ADVERTISE:
 		return dhcp_handle_advertise(ses, &resp.hdr, l);
 
-	case 7:
+	case DHCPV6_TYPE_REPLY:
 		return dhcp_handle_reply(ses, &resp.hdr, 1);
 
 		break;
-
+	}
 
 	return 0;
+}
+
+static void dhcp_validate_objects(struct dhcp_session *ses)
+{
+	for (size_t i = 0; i < ses->num_iaid; ++i) {
+		struct dhcp_iaid	*iad = &ses->iaid[i];
+
+		assert(iad->state != IAID_STATE_SOLICATE_RETRY);
+	}
 }
 
 int main(int argc, char *argv[])
@@ -796,6 +947,8 @@ int main(int argc, char *argv[])
 
 	for (;;) {
 		enum dhcp_wait_result	wait_res = DHCP_WAIT_NONE;
+
+		dhcp_validate_objects(&session);
 
 		switch (session.state) {
 		case DHCP_CLNT_STATE_INIT:
