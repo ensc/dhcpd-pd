@@ -21,7 +21,7 @@
 #include <stdint.h>
 #include "util.h"
 
-enum {
+enum dhcpv6_type {
 	DHCPV6_TYPE_SOLICIT			= 1,
 	DHCPV6_TYPE_ADVERTISE			= 2,
 	DHCPV6_TYPE_REQUEST			= 3,
@@ -34,15 +34,49 @@ enum {
 	DHCPV6_TYPE_INFORMATION_REQUEST		= 11,
 };
 
-enum {
+inline static char const *dhcpv6_type_to_str(enum dhcpv6_type type)
+{
+	switch (type) {
+	case DHCPV6_TYPE_SOLICIT: return "SOLICIT";
+	case DHCPV6_TYPE_ADVERTISE: return "ADVERTISE";
+	case DHCPV6_TYPE_REQUEST: return "REQUEST";
+	case DHCPV6_TYPE_CONFIRM: return "CONFIRM";
+	case DHCPV6_TYPE_RENEW: return "RENEW";
+	case DHCPV6_TYPE_REBIND: return "REBIND";
+	case DHCPV6_TYPE_REPLY: return "REPLY";
+	case DHCPV6_TYPE_RELEASE: return "RELEASE";
+	case DHCPV6_TYPE_DECLINE: return "DECLINE";
+	case DHCPV6_TYPE_INFORMATION_REQUEST: return "INFORMATION-REQUEST";
+	}
+
+	return "???";
+}
+
+enum dhcpv6_option {
 	DHCPV6_OPTION_CLIENTID			= 1,
+	DHCPV6_OPTION_SERVERID			= 2,
+	DHCPV6_OPTION_PREFERENCE		= 7,
 	DHCPV6_OPTION_ELAPSED_TIME		= 8,
 	DHCPV6_OPTION_IA_PD			= 25,
 	DHCPV6_OPTION_IAPREFIX			= 26,
 
 };
 
-#pragma pack(push)
+inline static char const *dhcpv6_option_to_str(enum dhcpv6_option option)
+{
+	switch (option) {
+	case DHCPV6_OPTION_CLIENTID: return "CLIENTID";
+	case DHCPV6_OPTION_SERVERID: return "SERVERID";
+	case DHCPV6_OPTION_ELAPSED_TIME: return "ELAPSED TIME";
+	case DHCPV6_OPTION_IA_PD: return "IA-PD";
+	case DHCPV6_OPTION_IAPREFIX: return "IAPREFIX";
+	case DHCPV6_OPTION_PREFERENCE: return "PREFERENCE";
+	}
+
+	return "???";
+}
+
+#pragma pack(push,1)
 struct dhcpv6_message_hdr {
 	uint8_t		type;
 	uint8_t		xmit_id[3];
