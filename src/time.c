@@ -14,32 +14,20 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef H_ENSC_DHCP_PD_UTIL_H
-#define H_ENSC_DHCP_PD_UTIL_H
+#include "time.h"
 
-#include <stdint.h>
-#include <endian.h>
+#include <time.h>
 
-struct be16 {
-	uint16_t	vx;
-};
-typedef struct be16	be16_t;
-
-struct be32 {
-	uint32_t	vx;
-};
-typedef struct be32	be32_t;
-
-#define CPU_TO_BE16(_v) (struct be16){ .vx = htobe16(_v) }
-inline static uint16_t	be16_to_cpu(struct be16 v)
+dhcp_time_t time_now(void)
 {
-	return be16toh(v.vx);
-}
+	struct timespec	ts;
+	uint64_t	now;
 
-#define CPU_TO_BE32(_v) (struct be32){ .vx = htobe32(_v) }
-inline static uint32_t	be32_to_cpu(struct be32 v)
-{
-	return be32toh(v.vx);
-}
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 
-#endif	/* H_ENSC_DHCP_PD_UTIL_H */
+	now  = ts.tv_sec;
+	now *= 1000;
+	now += ts.tv_nsec / 1000000;
+
+	return (dhcp_time_t){ now };
+}

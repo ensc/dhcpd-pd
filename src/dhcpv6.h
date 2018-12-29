@@ -107,6 +107,12 @@ dhcpv6_get_option_data(struct dhcpv6_option_hdr const *opt)
 	return &opt[1];
 }
 
+inline static size_t
+dhcpv6_get_option_len(struct dhcpv6_option_hdr const *opt)
+{
+	return be16_to_cpu(opt->len);
+}
+
 inline static struct dhcpv6_option_hdr const *
 dhcpv6_validated_option(struct dhcpv6_option_hdr const *opt, size_t len)
 {

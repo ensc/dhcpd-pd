@@ -1,12 +1,26 @@
+builddir ?= .
 srcdir ?= $(dir $(firstword ${MAKEFILE_LIST}))
 VPATH = ${srcdir}
 
 INSTALL = install
 INSTALL_BIN = ${INSTALL} -p -m 0755
 
+
+OPTFLAGS =	-O2 -g3
+CFLAGS_flto =	-flto
+LDFLAGS_flto =	-fuse-linker-plugin
 AM_CFLAGS =	-std=gnu11 -Wall -W -Wno-unused-parameter
-CFLAGS =	-O2 -g3 -Werror -D_FORTIFY_SOURCE=2 -fstack-protector
+AM_CPPFLAGS =	-I${srcdir} -D_GNU_SOURCE
+CFLAGS =	${OPTFLAGS} -Werror -D_FORTIFY_SOURCE=2 -fstack-protector -DDEBUG_LEVEL=0xffff ${CFLAGS_flto}
+LDFLAGS =	${LDFLAGS_flto} -Wl,-as-needed
 LDLIBS  =	-lcrypto
+PROFILE_FLAGS =	--coverage -fprofile-dir=${builddir}/.gcov/${@F} -fprofile-abs-path -fno-inline
+
+GENHTML =		genhtml
+GENHTML_OUTDIR =	.lcov-html
+LCOV =			lcov
+LCOV_FLAGS =		-b ${srcdir} --no-external
+LCOV_INFO =		dhcpd-pd.lcov.info
 
 compile_link = ${CC} -o $@ \
 	${AM_CPPFLAGS} ${CPPFLAGS} \
@@ -15,18 +29,116 @@ compile_link = ${CC} -o $@ \
 	$1 \
 	${LDLIBS}
 
+register_program = $1: $${$1_SOURCES}
+
 prefix ?=			/usr/local
 sbindir ?=			${prefix}/sbin
 
-all:	dhcpd-pd
+sbin_PROGRAMS = \
+	dhcpd-pd
 
-dhcpd-pd:	src/dhcpd-pd.c
+noinst_PROGRAMS = \
+	tests/00-utils_network \
+	tests/00-utils_reliability \
+	tests/00-utils_xmit \
+	tests/00-time \
+	tests/99-coverage \
+
+dhcpd-pd_SOURCES = \
+	ensc-lib/list.h \
+	ensc-lib/logging.c \
+	ensc-lib/logging.h \
+	src/dhcpv6-util.c \
+	src/dhcpv6-util.h \
+	src/dhcpv6.h \
+	src/time.c \
+	src/time.h \
+	src/util.h \
+	src/iapd.c \
+	src/buffer.c \
+	src/buffer.h \
+	src/duid.c \
+	src/duid.h \
+	src/dhcpd-pd.c \
+
+tests/00-utils_network_SOURCES = \
+	tests/00-utils_network.c \
+	tests/test-base.c \
+	src/dhcpv6-util.c \
+	src/dhcpv6-util.h \
+	ensc-lib/logging.c \
+	ensc-lib/logging.h \
+
+tests/00-utils_reliability_SOURCES = \
+	tests/00-utils_reliability.c \
+	tests/test-base.c \
+	src/dhcpv6-util.c \
+	src/dhcpv6-util.h \
+	src/time.c \
+	src/time.h \
+	ensc-lib/logging.c \
+	ensc-lib/logging.h \
+
+tests/00-utils_xmit_SOURCES = \
+	tests/00-utils_xmit.c \
+	tests/test-base.c \
+	src/dhcpv6-util.c \
+	src/dhcpv6-util.h \
+	ensc-lib/logging.c \
+	ensc-lib/logging.h \
+
+tests/00-time_SOURCES = \
+	tests/00-time.c \
+	tests/test-base.c \
+	src/time.c \
+	src/time.h \
+
+tests/99-coverage_SOURCES = \
+	tests/99-coverage.c \
+	tests/test-base.c \
+	$(filter-out src/dhcpd-pd.c,${dhcpd-pd_SOURCES}) \
+
+all:	${sbin_PROGRAMS} ${noinst_PROGRAMS}
+
+${sbin_PROGRAMS} ${noinst_PROGRAMS}:
+	rm -f *.gcno
 	$(call compile_link,$(filter %.c,$^))
+	mkdir -p '${builddir}/.gcov/${@F}'
+	for i in *.gcno; do ! test -e "$$i" || mv $$i ${builddir}/.gcov/${@F}/; done
+
+$(filter tests/%,${noinst_PROGRAMS}):	OPTFLAGS=-O1 -g3 -DTESTSUITE ${PROFILE_FLAGS}
+$(filter tests/%,${noinst_PROGRAMS}):	CFLAGS_flto=
+$(filter tests/%,${noinst_PROGRAMS}):	LDFLAGS_flto=
 
 clean:
-	rm -f dhcpd-pd
+	rm -f ${sbin_PROGRAMS} ${noinst_PROGRAMS}
+	rm -f *.gcno *.gcda ${LCOV_INFO}
+	rm -rf ${GENHTML_OUTDIR} .gcov
 
 install:	.install-sbin
 
 .install-sbin:	dhcpd-pd
 	${INSTALL_BIN} -D $< ${DESTDIR}${sbindir}/dhcpd-pd
+
+
+run-lcov:	${noinst_PROGRAMS}
+	${LCOV} --zerocounters -d ${builddir}
+	@echo "================== running tests ==================="
+	${MAKE} --no-print-directory run-tests TEST_MODE=lcov
+	@echo "================== combining lcov data ==================="
+	for i in .gcov/*/test.info; do echo "-a $$i"; done | xargs \
+		${LCOV} ${LCOV_FLAGS} --output ${LCOV_INFO}
+	@echo "================== generating html output ==================="
+	${GENHTML} -o ${GENHTML_OUTDIR} ${LCOV_INFO}
+
+run-tests:	${noinst_PROGRAMS}
+	${MAKE} $(addprefix .run-test-,$^)
+
+$(addprefix .run-test-,${noinst_PROGRAMS}):.run-test-%:	%
+	$<
+	$(if ${TEST_MODE},${MAKE} --no-print-directory .run-${TEST_MODE}-$*)
+
+$(addprefix .run-lcov-,${noinst_PROGRAMS}):.run-lcov-%:	%
+	${LCOV} ${LCOV_FLAGS} -c -d .gcov/${<F} -o .gcov/${<F}/test.info
+
+$(foreach p,${sbin_PROGRAMS} ${noinst_PROGRAMS},$(eval $(call register_program,$p)))

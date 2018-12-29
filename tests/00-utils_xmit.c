@@ -14,32 +14,30 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef H_ENSC_DHCP_PD_UTIL_H
-#define H_ENSC_DHCP_PD_UTIL_H
+#undef NDEBUG
 
-#include <stdint.h>
-#include <endian.h>
+#include <assert.h>
+#include "../src/dhcpv6-util.h"
 
-struct be16 {
-	uint16_t	vx;
-};
-typedef struct be16	be16_t;
-
-struct be32 {
-	uint32_t	vx;
-};
-typedef struct be32	be32_t;
-
-#define CPU_TO_BE16(_v) (struct be16){ .vx = htobe16(_v) }
-inline static uint16_t	be16_to_cpu(struct be16 v)
+int main(void)
 {
-	return be16toh(v.vx);
-}
+	struct dhcpv6_transmission	xmit = {
+		.time		= { 23 },
+		.xmit_id	= { 1, 2, 3 },
+	};
+	dhcp_time_t			now = { 1000 };
 
-#define CPU_TO_BE32(_v) (struct be32){ .vx = htobe32(_v) }
-inline static uint32_t	be32_to_cpu(struct be32 v)
-{
-	return be32toh(v.vx);
-}
+	assert(xmit.time.tm == 23);
+	assert(xmit.xmit_id[0] == 1);
+	assert(xmit.xmit_id[1] == 2);
+	assert(xmit.xmit_id[2] == 3);
 
-#endif	/* H_ENSC_DHCP_PD_UTIL_H */
+	dhcpv6_transmission_init(&xmit, now);
+
+	assert(xmit.time.tm == 1000);
+	/* TODO: there is a small chance that getrandom() delivers such
+	 * values...  */
+	assert(xmit.xmit_id[0] != 1 ||
+	       xmit.xmit_id[1] != 2 ||
+	       xmit.xmit_id[2] != 3);
+}
