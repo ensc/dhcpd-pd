@@ -2,9 +2,9 @@ builddir ?= .
 srcdir ?= $(dir $(firstword ${MAKEFILE_LIST}))
 VPATH = ${srcdir}
 
-INSTALL = install
-INSTALL_BIN = ${INSTALL} -p -m 0755
-
+INSTALL =	install
+INSTALL_BIN =	${INSTALL} -p -m 0755
+MKDIR_P =	${INSTALL} -d -m 0755
 
 OPTFLAGS =	-O2 -g3
 CFLAGS_flto =	-flto
@@ -37,78 +37,32 @@ sbindir ?=			${prefix}/sbin
 sbin_PROGRAMS = \
 	dhcpd-pd
 
-noinst_PROGRAMS = \
-	tests/00-utils_network \
-	tests/00-utils_reliability \
-	tests/00-utils_xmit \
-	tests/00-time \
-	tests/99-coverage \
+noinst_PROGRAMS =
 
 dhcpd-pd_SOURCES = \
 	ensc-lib/list.h \
 	ensc-lib/logging.c \
 	ensc-lib/logging.h \
+	src/buffer.c \
+	src/buffer.h \
 	src/dhcpv6-util.c \
 	src/dhcpv6-util.h \
 	src/dhcpv6.h \
+	src/duid.c \
+	src/duid.h \
+	src/iapd.c \
+	src/logging-dhcp.c \
+	src/logging.h \
 	src/time.c \
 	src/time.h \
 	src/util.h \
-	src/iapd.c \
-	src/buffer.c \
-	src/buffer.h \
-	src/duid.c \
-	src/duid.h \
 	src/dhcpd-pd.c \
 
-tests/00-utils_network_SOURCES = \
-	tests/00-utils_network.c \
-	tests/test-base.c \
-	src/dhcpv6-util.c \
-	src/dhcpv6-util.h \
-	ensc-lib/logging.c \
-	ensc-lib/logging.h \
+include ${srcdir}/tests/Modules.mk
 
-tests/00-utils_reliability_SOURCES = \
-	tests/00-utils_reliability.c \
-	tests/test-base.c \
-	src/dhcpv6-util.c \
-	src/dhcpv6-util.h \
-	src/time.c \
-	src/time.h \
-	ensc-lib/logging.c \
-	ensc-lib/logging.h \
+all:	${sbin_PROGRAMS}
 
-tests/00-utils_xmit_SOURCES = \
-	tests/00-utils_xmit.c \
-	tests/test-base.c \
-	src/dhcpv6-util.c \
-	src/dhcpv6-util.h \
-	ensc-lib/logging.c \
-	ensc-lib/logging.h \
-
-tests/00-time_SOURCES = \
-	tests/00-time.c \
-	tests/test-base.c \
-	src/time.c \
-	src/time.h \
-
-tests/99-coverage_SOURCES = \
-	tests/99-coverage.c \
-	tests/test-base.c \
-	$(filter-out src/dhcpd-pd.c,${dhcpd-pd_SOURCES}) \
-
-all:	${sbin_PROGRAMS} ${noinst_PROGRAMS}
-
-${sbin_PROGRAMS} ${noinst_PROGRAMS}:
-	rm -f *.gcno
-	$(call compile_link,$(filter %.c,$^))
-	mkdir -p '${builddir}/.gcov/${@F}'
-	for i in *.gcno; do ! test -e "$$i" || mv $$i ${builddir}/.gcov/${@F}/; done
-
-$(filter tests/%,${noinst_PROGRAMS}):	OPTFLAGS=-O1 -g3 -DTESTSUITE ${PROFILE_FLAGS}
-$(filter tests/%,${noinst_PROGRAMS}):	CFLAGS_flto=
-$(filter tests/%,${noinst_PROGRAMS}):	LDFLAGS_flto=
+world:	all ${noinst_PROGRAMS}
 
 clean:
 	rm -f ${sbin_PROGRAMS} ${noinst_PROGRAMS}
@@ -117,11 +71,17 @@ clean:
 
 install:	.install-sbin
 
-.install-sbin:	dhcpd-pd
-	${INSTALL_BIN} -D $< ${DESTDIR}${sbindir}/dhcpd-pd
+.install-sbin:	${sbin_PROGRAMS}
+	${MKDIR_P} ${DESTDIR}${sbindir}/dhcpd-pd
+	${INSTALL_BIN} -D $^ ${DESTDIR}${sbindir}/
 
+${sbin_PROGRAMS} ${noinst_PROGRAMS}:
+	rm -f *.gcno
+	$(call compile_link,$(filter %.c,$^))
+	mkdir -p '${builddir}/.gcov/${@F}'
+	for i in *.gcno; do ! test -e "$$i" || mv $$i ${builddir}/.gcov/${@F}/; done
 
-run-lcov:	${noinst_PROGRAMS}
+run-lcov:
 	${LCOV} --zerocounters -d ${builddir}
 	@echo "================== running tests ==================="
 	${MAKE} --no-print-directory run-tests TEST_MODE=lcov

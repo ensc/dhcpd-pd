@@ -36,17 +36,20 @@ struct dhcp_states {
 	enum dhcp_iapd_state	error;		/* done */
 
 	bool			req_serverid;	/* matching SERVERID required */
+	bool			no_io;
 };
 
 static struct dhcp_states const	STATES[] = {
 	[IAPD_STATE_INIT] = {
 		.name		= "INIT",
-		.done		= IAPD_STATE_INIT,
+		.done		= IAPD_STATE_SOLICATE_INIT,
+		.no_io		= true,
 	},
 
 	[IAPD_STATE_SOLICATE_INIT] = {
 		.name		= "SOLICATE-INIT",
 		.done		= IAPD_STATE_SOLICATE,
+		.no_io		= true,
 	},
 
 	[IAPD_STATE_SOLICATE]	= {
@@ -59,6 +62,7 @@ static struct dhcp_states const	STATES[] = {
 	[IAPD_STATE_REQUEST_INIT] = {
 		.name		= "REQUEST-INIT",
 		.done		= IAPD_STATE_REQUEST,
+		.no_io		= true,
 	},
 
 	[IAPD_STATE_REQUEST]	= {
@@ -72,6 +76,7 @@ static struct dhcp_states const	STATES[] = {
 	[IAPD_STATE_ACTIVE_INIT] = {
 		.name		= "ACTIVE-INIT",
 		.done		= IAPD_STATE_ACTIVE,
+		.no_io		= true,
 	},
 
 	[IAPD_STATE_ACTIVE] = {
@@ -85,6 +90,7 @@ static struct dhcp_states const	STATES[] = {
 	[IAPD_STATE_RENEW_INIT] = {
 		.name		= "RENEW-INIT",
 		.done		= IAPD_STATE_RENEW,
+		.no_io		= true,
 	},
 
 	[IAPD_STATE_RENEW] = {
@@ -100,6 +106,7 @@ static struct dhcp_states const	STATES[] = {
 	[IAPD_STATE_REBIND_INIT] = {
 		.name		= "REBIND-INIT",
 		.done		= IAPD_STATE_RENEW,
+		.no_io		= true,
 	},
 
 	[IAPD_STATE_REBIND] = {
@@ -181,7 +188,7 @@ static dhcp_time_t dhcp_iapd_min_valid_tm(struct dhcp_iapd const *iapd)
 	dhcp_time_t	res = TIME_INFINITY;
 
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
-		struct dhcp_iaprefix const	*prefix = &iapd->iaprefix[i];
+		struct dhcp_iaprefix const	*prefix = &iapd->iaprefix[i].active;
 
 		if (time_cmp(prefix->valid_tm, res) < 0)
 			res = prefix->valid_tm;
@@ -195,7 +202,7 @@ static dhcp_time_t dhcp_iapd_min_pref_tm(struct dhcp_iapd const *iapd)
 	dhcp_time_t	res = TIME_INFINITY;
 
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
-		struct dhcp_iaprefix const	*prefix = &iapd->iaprefix[i];
+		struct dhcp_iaprefix const	*prefix = &iapd->iaprefix[i].active;
 
 		if (time_cmp(prefix->pref_tm, res) < 0)
 			res = prefix->pref_tm;
@@ -211,10 +218,13 @@ static void dhcp_iapd_validate(struct dhcp_iapd const *iapd)
 	assert(iapd->state < ARRAY_SIZE(STATES));
 	assert(iapd->iostate <= IAPD_IOSTATE_TIMEOUT);
 	assert(!state->req_serverid || iapd->server.has_id);
-	assert(time_cmp(iapd->lease_t1, iapd->lease_t2) <= 0);
+	assert(time_cmp(iapd->active.lease_t1, iapd->active.lease_t2) <= 0);
+	assert(time_cmp(iapd->pending.lease_t1, iapd->pending.lease_t2) <= 0);
 
-	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i)
-		dhcp_iaprefix_validate(&iapd->iaprefix[i]);
+	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
+		dhcp_iaprefix_validate(&iapd->iaprefix[i].active);
+		dhcp_iaprefix_validate(&iapd->iaprefix[i].pending);
+	}
 }
 
 dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
@@ -223,6 +233,8 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 	struct dhcpv6_reliability	*rel = &iapd->reliability;
 	struct dhcp_states const	*state = &STATES[iapd->state];
 
+	pr_enter("%pA", iapd);
+
 	dhcp_iapd_validate(iapd);
 
 	if (iapd->state == IAPD_STATE_UNUSED)
@@ -230,7 +242,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 
 	/* check #1: test T2 */
 	if (state->t2_to != IAPD_STATE_NONE) {
-		if (time_cmp(iapd->lease_t2, now) < 0) {
+		if (time_cmp(iapd->active.lease_t2, now) < 0) {
 			pr_warn("%s T2 reached; going to %s", state->name,
 				STATES[state->t2_to].name);
 			iapd->state = state->t2_to;
@@ -238,7 +250,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 			goto out;
 		}			
 
-		timeout = time_min(timeout, iapd->lease_t2);
+		timeout = time_min(timeout, iapd->active.lease_t2);
 	}
 
 	/* check #2: test valid-tm of all iaprefix */
@@ -260,7 +272,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 
 	/* check #3: test T1 */
 	if (state->t1_to != IAPD_STATE_NONE) {
-		if (time_cmp(iapd->lease_t1, now) < 0) {
+		if (time_cmp(iapd->active.lease_t1, now) < 0) {
 			pr_warn("%s T1 reached; going to %s", state->name,
 				STATES[state->t1_to].name);
 			iapd->state = state->t1_to;
@@ -268,7 +280,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 			goto out;
 		}			
 
-		timeout = time_min(timeout, iapd->lease_t1);
+		timeout = time_min(timeout, iapd->active.lease_t1);
 	}
 
 	/* check #4: test pref-tm of all iaprefix */
@@ -309,25 +321,36 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 		
 	case IAPD_STATE_INIT:
 		for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
-			dhcp_iaprefix_init(&iapd->iaprefix[i], now, true);
+			dhcp_iaprefix_init(&iapd->iaprefix[i].active,  now, true);
+			dhcp_iaprefix_init(&iapd->iaprefix[i].pending, now, true);
 
-			iapd->iaprefix[i].iapd = iapd;
-		}	
+			iapd->iaprefix[i].active.iapd = iapd;
+			iapd->iaprefix[i].pending.iapd = iapd;
+		}
+
+		iapd->active.t1 = 0;
+		iapd->active.t2 = 0;
+		iapd->active.lease_t1 = TIME_EPOCH;
+		iapd->active.lease_t2 = TIME_EPOCH;
+
 		break;
 
 	case IAPD_STATE_SOLICATE_INIT:
 		if (iapd->preferences.is_set) {
-			iapd->t1 = iapd->preferences.t1;
-			iapd->t2 = iapd->preferences.t2;
+			iapd->pending.t1 = iapd->preferences.t1;
+			iapd->pending.t2 = iapd->preferences.t2;
 		} else {
-			iapd->t1 = iapd->t1;
-			iapd->t2 = iapd->t2;
+			iapd->pending.t1 = 0;
+			iapd->pending.t2 = 0;
 		}
+
+		iapd->pending.lease_t1 = TIME_EPOCH;
+		iapd->pending.lease_t2 = TIME_EPOCH;
 
 		dhcpv6_transmission_init(&iapd->xmit, now);
 
 		for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i)
-			dhcp_iaprefix_init(&iapd->iaprefix[i], now, false);
+			dhcp_iaprefix_init(&iapd->iaprefix[i].pending, now, false);
 
 		iapd->server.has_id = false;
 
@@ -360,6 +383,9 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 		break;
 	}
 
+	if (state->no_io)
+		iapd->iostate = IAPD_IOSTATE_DONE;
+
 	/* regular iostate transition */
 
 	switch (iapd->iostate) {
@@ -380,7 +406,9 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 		assert(state->done != IAPD_STATE_NONE);
 
 		iapd->state = state->done;
-		if (STATES[iapd->state].done == IAPD_STATE_NONE)
+		if (STATES[iapd->state].no_io)
+			iapd->iostate = IAPD_IOSTATE_NONE;
+		else if (STATES[iapd->state].done == IAPD_STATE_NONE)
 			iapd->iostate = IAPD_IOSTATE_WAIT;
 		else
 			iapd->iostate = IAPD_IOSTATE_SEND;
@@ -410,6 +438,8 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 out:
 	dhcp_iapd_validate(iapd);
 
+	pr_leave("%pA; timeout %pT", iapd, &timeout);
+
 	switch (iapd->iostate) {
 	case IAPD_IOSTATE_SEND:
 	case IAPD_IOSTATE_NONE:
@@ -431,7 +461,7 @@ static void finish_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 	unsigned int	num_prefix = 0;
 
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
-		struct dhcp_iaprefix const	*prefix = &iapd->iaprefix[i];
+		struct dhcp_iaprefix const	*prefix = &iapd->iaprefix[i].pending;
 
 		if (!time_is_epoch(prefix->valid_tm))
 			continue;
@@ -446,6 +476,8 @@ static void finish_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 		pr_debug("IAPD: finished");
 		iapd->iostate = IAPD_IOSTATE_DONE;
 	}
+
+	pr_debug("IAPD finished: %pA", iapd);
 }
 
 /**
@@ -495,7 +527,7 @@ static int handle_ia_prefix(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	 */
 	/* TODO: in case of "same network": check lifetimes too? */
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
-		struct dhcp_iaprefix	*tmp = &iapd->iaprefix[i];
+		struct dhcp_iaprefix		*tmp = &iapd->iaprefix[i].pending;
 
 		dhcp_iaprefix_validate(tmp);
 
@@ -517,6 +549,13 @@ static int handle_ia_prefix(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 		return 1;
 	}
 
+	prefix->net = net;
+	prefix->pref_lt = pref_lt;
+	prefix->valid_lt = valid_lt;
+	prefix->pref_tm = pref_tm;
+	prefix->valid_tm = valid_tm;
+
+	dhcp_iaprefix_validate(prefix);
 	dhcp_iapd_validate(iapd);
 
 	return 0;
@@ -534,6 +573,11 @@ static int handle_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	if (len < sizeof *opt_iapd) {
 		pr_warn("IAPD: too small IA_PD option");
 		return -1;
+	}
+
+	if (be32_to_cpu(opt_iapd->id) != iapd->id) {
+		pr_warn("IAPD: id mismatch");
+		return 1;
 	}
 
 	len -= sizeof *opt_iapd;
@@ -589,6 +633,14 @@ static int handle_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 			break;
 	}
 
+	if (rc < 0)
+		goto out;
+
+	iapd->pending.t1 = be32_to_cpu(opt_iapd->t1);
+	iapd->pending.t2 = be32_to_cpu(opt_iapd->t2);
+
+
+out:
 	dhcp_iapd_validate(iapd);
 
 	return rc;
@@ -601,7 +653,7 @@ int dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	size_t				tmp_len = len;
 	int				rc;
 
-	pr_trace("IAPD: recv");
+	pr_enter("%pA", iapd);
 
 	assert(ctx->server.opt != NULL);
 	dhcp_iapd_validate(iapd);
@@ -628,6 +680,27 @@ int dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 		}
 	}
 
+	switch (ctx->status_code) {
+	case DHCPV6_STATUS_CODE_SUCCESS:
+		break;
+
+	case DHCPV6_STATUS_CODE_NOADDRSAVAIL:
+		/* https://tools.ietf.org/html/rfc3315#section-17.1.3 */
+		if (iapd->state == IAPD_STATE_SOLICATE) {
+			pr_info("SOLICATE:  no addrs available; ignoring");
+			return 1;
+		}
+
+		iapd->iostate = IAPD_IOSTATE_ERROR;
+		pr_warn("no addrs available");
+		return 1;
+
+	default:
+		iapd->iostate = IAPD_IOSTATE_ERROR;
+		pr_warn("bad status code from serer: %d", ctx->status_code);
+		return 1;
+	}
+
 	rc = 0;
 	dhcpv6_foreach_option(opt, hdr, &tmp_len) {
 		switch (be16_to_cpu(opt->option)) {
@@ -649,6 +722,8 @@ int dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 		finish_ia_pd(iapd, ctx);
 
 out:
+	pr_leave("%pA; rc=%d", iapd, rc);
+
 	dhcp_iapd_validate(iapd);
 
 	return rc;
@@ -657,6 +732,9 @@ out:
 
 int dhcp_iapd_run(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 {
+	pr_enter("%pA", iapd);
+
+	pr_leave("%pA", iapd);
 	dhcp_iapd_validate(iapd);
 
 	/* TODO */

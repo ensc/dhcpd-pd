@@ -42,4 +42,28 @@ inline static uint32_t	be32_to_cpu(struct be32 v)
 	return be32toh(v.vx);
 }
 
+inline static uint16_t read_be8(void const *mem)
+{
+	uint8_t	tmp;
+
+	memcpy(&tmp, mem, sizeof tmp);
+	return tmp;
+}
+
+inline static uint16_t read_be16(void const *mem)
+{
+	uint16_t	tmp;
+
+	memcpy(&tmp, mem, sizeof tmp);
+	return be16toh(tmp);
+}
+
+inline static uint32_t read_be32(void const *mem)
+{
+	uint32_t	tmp;
+
+	memcpy(&tmp, mem, sizeof tmp);
+	return be32toh(tmp);
+}
+
 #endif	/* H_ENSC_DHCP_PD_UTIL_H */

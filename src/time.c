@@ -23,7 +23,7 @@ dhcp_time_t time_now(void)
 	struct timespec	ts;
 	uint64_t	now;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	clock_gettime(CLOCK_BOOTTIME, &ts);
 
 	now  = ts.tv_sec;
 	now *= 1000;

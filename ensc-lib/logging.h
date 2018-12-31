@@ -54,6 +54,8 @@ void		_log_msg(unsigned int lvl, unsigned int domain,
 			 char const *fmt, ...)
 	__attribute__((__format__(printf, 5, 6)));
 
+char const *	log_transform_fmt(char const *fmt);
+
 inline static bool _pure_ log_enabled(unsigned int lvl, unsigned int domain)
 {
 	bool	rc;

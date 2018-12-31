@@ -1,1 +1,4 @@
-./dhcpd-pd
+/.gcov
+/.lcov-html
+/dhcpd-pd
+/dhcpd-pd.lcov.info

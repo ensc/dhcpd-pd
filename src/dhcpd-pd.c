@@ -134,6 +134,12 @@ static int dhcp_session_open(struct dhcp_session *ses, char const *ifname)
 		.ifidx	= -1,
 	};
 
+	for (size_t i = 0; i < ARRAY_SIZE(ses->iapd); ++i) {
+		struct dhcp_iapd	*iapd = &ses->iapd[i];
+
+		iapd->state = IAPD_STATE_INIT;
+	}
+
 	dhcpv6_duid_generate(&ses->duid);
 
 	return dhcp_session_reopen(ses);
@@ -153,6 +159,21 @@ static void dhcp_handle_signal(struct dhcp_session *ses, int sig_fd)
 	/* TODO */
 }
 
+static unsigned int read_status_code(void const *code_pkt, size_t len)
+{
+	unsigned int	res = read_be16(code_pkt);
+	char const	*msg = code_pkt + 2;
+
+	len -= 2;
+
+	if (res == 0)
+		pr_info("STATUS: %.*s", (int)len, msg);
+	else
+		pr_warn("STATUS %u: %.*s", res, (int)len, msg);
+
+	return res;
+}
+
 static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *ctx,
 				struct dhcpv6_message_hdr const *hdr, size_t len)
 {
@@ -161,7 +182,8 @@ static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *c
 	int				rc;
 
 	dhcpv6_foreach_option(opt, hdr, &tmp_len) {
-		uint8_t			preference;
+		size_t		opt_len = dhcpv6_get_option_len(opt);
+		void const	*opt_data = dhcpv6_get_option_data(opt);
 
 		pr_debug("OPTION: %s",
 			 dhcpv6_option_to_str(be16_to_cpu(opt->option)));
@@ -171,6 +193,7 @@ static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *c
 			if (opt_clnt_id) {
 				pr_err("duplicate CLIENTID");
 				rc = -1;
+				goto out_loop;
 			}
 
 			opt_clnt_id = opt;
@@ -180,22 +203,34 @@ static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *c
 			if (ctx->server.opt) {
 				pr_err("duplicate SERVERID");
 				rc = -1;
-			} else if (be16_to_cpu(opt->len) > DHCPV6_MAX_DUID_SZ) {
+				goto out_loop;
+			} else if (opt_len > DHCPV6_MAX_DUID_SZ) {
 				pr_err("SERVERID too large");
 				rc = -1;
-			} else {
-				ctx->server.opt = opt;
+				goto out_loop;
 			}
+
+			ctx->server.opt = opt;
 			break;
 
 		case DHCPV6_OPTION_PREFERENCE:
-			if (be16_to_cpu(opt->len) != 1)
+			if (opt_len != 1) {
 				pr_err("bad PREFERENCE");
+				rc = -1;
+				goto out_loop;
+			}
 
-			memcpy(&preference, dhcpv6_get_option_data(opt),
-			       sizeof preference);
+			ctx->server.pref = read_be8(opt_data);
+			break;
 
-			ctx->server.pref = preference;
+		case DHCPV6_OPTION_STATUS_CODE:
+			if (opt_len < 2) {
+				pr_err("bad STATUS CODE");
+				rc = -1;
+				goto out_loop;
+			}
+
+			ctx->status_code = read_status_code(opt_data, opt_len);
 			break;
 
 		default:
@@ -203,6 +238,7 @@ static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *c
 			break;
 		}
 
+	out_loop:
 		if (rc < 0)
 			break;
 	}
@@ -405,7 +441,9 @@ static int dhcp_wait(struct dhcp_session *ses, struct dhcp_context *ctx)
 	return 0;
 }
 
+#ifndef TESTSUITE
 int	_log_fd = 2;
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -416,6 +454,7 @@ int main(int argc, char *argv[])
 	int			sig_fd = -1;
 	int			rc;
 
+	logging_register_conversions();
 
 	(void)script ;
 

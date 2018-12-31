@@ -122,6 +122,7 @@ static void test_02(void)
 	assert(dhcpv6_network_cmp(&net_b, &net_c) < 0);
 }
 
+#undef main
 int main(void)
 {
 	test_00();

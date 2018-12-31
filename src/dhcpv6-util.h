@@ -26,6 +26,8 @@
 #include "duid.h"
 #include "time.h"
 
+#include "dhcpv6.h"
+
 #ifdef TESTSUITE
 #  define TEST_ONLY(_statement)		_statement
 #else
@@ -160,6 +162,7 @@ struct dhcp_context {
 	bool				data_available;
 
 	struct dhcpv6_server_info	server;
+	enum dhcpv6_status_code		status_code;
 };
 
 /****************/
@@ -202,11 +205,14 @@ enum dhcp_iapd_iostate {
 struct dhcp_iapd {
 	/* https://tools.ietf.org/html/rfc3633#section-9 */
 	uint32_t			id;
-	uint32_t			t1;
-	uint32_t			t2;
 
-	dhcp_time_t			lease_t1;
-	dhcp_time_t			lease_t2;
+	struct {
+		uint32_t		t1;
+		uint32_t		t2;
+		dhcp_time_t		lease_t1;
+		dhcp_time_t		lease_t2;
+	}				active, pending;
+
 
 	struct dhcpv6_server		server;
 
@@ -217,7 +223,11 @@ struct dhcp_iapd {
 
 	struct dhcpv6_transmission	xmit;
 	struct dhcp_iapd_pref		preferences;
-	struct dhcp_iaprefix		iaprefix[DHCPV6_IAPREFIX_PER_IAPD];
+
+	struct {
+		struct dhcp_iaprefix	active;
+		struct dhcp_iaprefix	pending;
+	}				iaprefix[DHCPV6_IAPREFIX_PER_IAPD];
 };
 
 struct dhcpv6_message_hdr;

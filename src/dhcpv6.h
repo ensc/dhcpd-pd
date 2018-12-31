@@ -57,9 +57,14 @@ enum dhcpv6_option {
 	DHCPV6_OPTION_SERVERID			= 2,
 	DHCPV6_OPTION_PREFERENCE		= 7,
 	DHCPV6_OPTION_ELAPSED_TIME		= 8,
+	DHCPV6_OPTION_STATUS_CODE		= 13,
 	DHCPV6_OPTION_IA_PD			= 25,
 	DHCPV6_OPTION_IAPREFIX			= 26,
+};
 
+enum dhcpv6_status_code {
+	DHCPV6_STATUS_CODE_SUCCESS		= 0,
+	DHCPV6_STATUS_CODE_NOADDRSAVAIL		= 2,
 };
 
 inline static char const *dhcpv6_option_to_str(enum dhcpv6_option option)
@@ -71,6 +76,7 @@ inline static char const *dhcpv6_option_to_str(enum dhcpv6_option option)
 	case DHCPV6_OPTION_IA_PD: return "IA-PD";
 	case DHCPV6_OPTION_IAPREFIX: return "IAPREFIX";
 	case DHCPV6_OPTION_PREFERENCE: return "PREFERENCE";
+	case DHCPV6_OPTION_STATUS_CODE: return "STATUS CODE";
 	}
 
 	return "???";

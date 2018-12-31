@@ -16,6 +16,7 @@
 
 #include "../src/dhcpv6-util.h"
 
+#undef main
 int main(void)
 {
 	struct dhcpv6_reliability			rel;

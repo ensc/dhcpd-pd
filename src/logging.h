@@ -32,7 +32,9 @@ enum {
 #define pr_err(fmt, ...)	log_msg(L_ERR,   LOG_DOMAIN, fmt, ##__VA_ARGS__)
 #define pr_crit(fmt, ...)	log_msg(L_PANIC, LOG_DOMAIN, fmt, ##__VA_ARGS__)
 
-#define pr_trace(fmt, ...)	log_msg(L_DEBUG1 | L_PUSH, LOG_DOMAIN, fmt, ##__VA_ARGS__)
+#define pr_enter(fmt, ...)	log_msg(L_DEBUG1 | L_PUSH, LOG_DOMAIN, "{ " fmt, ##__VA_ARGS__)
+#define pr_leave(fmt, ...)	log_msg(L_DEBUG1 | L_POP,  LOG_DOMAIN, fmt " }", ##__VA_ARGS__)
 
+void logging_register_conversions(void);
 
 #endif	/* H_ENSC_DHCP_PD_LOGGING_H */

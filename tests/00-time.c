@@ -107,6 +107,7 @@ void test_02(void)
 	assert(time_cmp(tm_a, tm_b) < 0);
 }
 
+#undef main
 int main(void)
 {
 	test_00();
