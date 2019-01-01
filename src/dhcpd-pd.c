@@ -138,6 +138,7 @@ static int dhcp_session_open(struct dhcp_session *ses, char const *ifname)
 		struct dhcp_iapd	*iapd = &ses->iapd[i];
 
 		iapd->state = IAPD_STATE_INIT;
+		iapd->id    = i + 1;
 	}
 
 	dhcpv6_duid_generate(&ses->duid);
@@ -157,21 +158,6 @@ static void dhcp_handle_signal(struct dhcp_session *ses, int sig_fd)
 	}
 
 	/* TODO */
-}
-
-static unsigned int read_status_code(void const *code_pkt, size_t len)
-{
-	unsigned int	res = read_be16(code_pkt);
-	char const	*msg = code_pkt + 2;
-
-	len -= 2;
-
-	if (res == 0)
-		pr_info("STATUS: %.*s", (int)len, msg);
-	else
-		pr_warn("STATUS %u: %.*s", res, (int)len, msg);
-
-	return res;
 }
 
 static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *ctx,
@@ -197,6 +183,19 @@ static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *c
 			}
 
 			opt_clnt_id = opt;
+			break;
+
+		case DHCPV6_OPTION_UNICAST:
+			if (opt_len != sizeof ctx->server.addr) {
+				pr_warn("bad UNICAST option");
+				rc = -1;
+				goto out_loop;
+			}
+
+			ctx->server.is_unicast = true;
+
+			/* TODO: store original server address somewhere? */
+			memcpy(&ctx->server.addr, opt_data, sizeof ctx->server.addr);
 			break;
 
 		case DHCPV6_OPTION_SERVERID:
@@ -230,7 +229,7 @@ static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *c
 				goto out_loop;
 			}
 
-			ctx->status_code = read_status_code(opt_data, opt_len);
+			ctx->status_code = dhcpv6_read_status_code(opt_data, opt_len);
 			break;
 
 		default:
@@ -303,6 +302,8 @@ static int dhcp_read_response(struct dhcp_session *ses, struct dhcp_context *ctx
 
 	ssize_t			l;
 	int			rc;
+
+	pr_enter("");
 
 	ctx->server = (struct dhcpv6_server_info) {
 		.pref	= 0
@@ -392,6 +393,8 @@ static int dhcp_read_response(struct dhcp_session *ses, struct dhcp_context *ctx
 		break;
 	}
 
+	pr_leave("rc=%d", rc);
+
 	return rc;
 }
 
@@ -401,9 +404,13 @@ static int dhcp_wait(struct dhcp_session *ses, struct dhcp_context *ctx)
 	struct pollfd		*pfd = &pfds[0];
 	int			timeout = 0;
 	int			rc;
+	dhcp_time_t		tm_delta;
 
 	assert(!time_is_epoch(ctx->timeout));
 	assert(time_cmp(ctx->timeout, ctx->now) > 0);
+
+	tm_delta = time_sub(ctx->timeout, ctx->now);
+	pr_enter("waiting %pG", &tm_delta);
 
 	*pfd++ = (struct pollfd) {
 		.fd	= ctx->sig_fd,
@@ -418,7 +425,7 @@ static int dhcp_wait(struct dhcp_session *ses, struct dhcp_context *ctx)
 			.events	= POLLIN,
 		};
 
-		timeout = time_to_ms(time_sub(ctx->now, ctx->timeout));
+		timeout = time_to_ms(tm_delta);
 	}
 
 	rc = poll(pfds, pfd - &pfds[0], timeout);
@@ -438,11 +445,15 @@ static int dhcp_wait(struct dhcp_session *ses, struct dhcp_context *ctx)
 			ctx->data_available = true;
 	}
 
+	pr_leave("sig=%d, data=%d", ctx->sig_available, ctx->data_available);
+
 	return 0;
 }
 
 #ifndef TESTSUITE
 int	_log_fd = 2;
+#else
+int main(int argc, char *argv[]);
 #endif
 
 int main(int argc, char *argv[])
@@ -481,14 +492,18 @@ int main(int argc, char *argv[])
 	for (;;) {
 		struct dhcp_context	ctx = {
 			.fd		= session.fd,
+			.ifidx		= session.ifidx,
 			.sig_fd		= sig_fd,
 			.now		= time_now(),
 			.timeout	= TIME_INFINITY,
 			.sig_available	= false,
 			.data_available	= false,
+			.client_id	= &session.duid,
 		};
 
 		struct dhcp_iapd	*next_iapd = NULL;
+
+		pr_debug("==== now %pT ====", &ctx.now);
 
 		for (size_t i = 0; i < ARRAY_SIZE(session.iapd); ++i) {
 			struct dhcp_iapd	*iapd = &session.iapd[i];

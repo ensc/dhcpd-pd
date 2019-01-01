@@ -29,19 +29,21 @@ static char const		SPECIFIERS[256] = {
 	['X']	= 1,
 
 	['e']	= 1,
-	['E']	= 1,
 
 	['f']	= 1,
 	['F']	= 1,
 
 	['g']	= 1,
-	['G']	= 1,
 
 	['a']	= 1,
 
 #if 0
+	/* double with 'E' notation */
+	['E']	= 1,
 	/* double -> uppercase hex */
 	['A']	= 1,
+	/* double */
+	['G']	= 1,
 #endif
 
 	['c']	= 1,
@@ -59,6 +61,8 @@ static char const		SPECIFIERS[256] = {
 	['N']	= 2,
 	['R']	= 2,
 	['T']	= 2,
+	['E']	= 2,
+	['G']	= 2,
 };
 
 inline static bool is_local_mod(unsigned char c)
@@ -144,10 +148,12 @@ static int print_ipv6_arginfo(struct printf_info const *info, size_t n,
 
 #define PRINT_TIME_SZ	(3 * sizeof(uint64_t) + sizeof "Y364D 23:59:59.9999")
 
-static int print_time(FILE *stream, struct printf_info const *info,
-		      void const * const *args)
+static uint64_t		g_startup_time;
+
+static int _print_time(FILE *stream, struct printf_info const *info,
+		       dhcp_time_t const * const *time_arg,
+		       uint64_t tm_offs)
 {
-	dhcp_time_t const * const *	time_arg = args[0];
 	dhcp_time_t			time;
 	char				buf[PRINT_TIME_SZ];
 	char				*str;
@@ -166,7 +172,7 @@ static int print_time(FILE *stream, struct printf_info const *info,
 		static uint64_t const	TM_DAY  = TM_HOUR * 24;
 		static uint64_t const	TM_YEAR = TM_DAY * (uint64_t)365;
 
-		uint64_t		tm = time_to_ms(time);
+		uint64_t		tm = time_to_ms(time) - tm_offs;
 		char			*ptr = buf;
 		bool			need_part = false;
 
@@ -208,6 +214,18 @@ static int print_time(FILE *stream, struct printf_info const *info,
 	return fprintf(stream, "%*s", get_width(info), str);
 }
 
+static int print_time(FILE *stream, struct printf_info const *info,
+		      void const * const *args)
+{
+	return _print_time(stream, info, args[0], g_startup_time);
+}
+
+static int print_timeabs(FILE *stream, struct printf_info const *info,
+			 void const * const *args)
+{
+	return _print_time(stream, info, args[0], 0);
+}
+
 static int print_time_arginfo(struct printf_info const *info, size_t n,
 				  int *argtypes, int *sizes)
 {
@@ -218,6 +236,34 @@ static int print_time_arginfo(struct printf_info const *info, size_t n,
 }
 
 #include "dhcpv6-util.h"
+
+#define PRINT_RELIABILITY_SZ	(PRINT_TIME_SZ +		\
+				 2 * 3 * sizeof(unsigned int) + \
+				 sizeof "+/")
+
+static int print_reliability(FILE *stream, struct printf_info const *info,
+			     void const * const *args)
+{
+	struct dhcpv6_reliability const * const *	rel_arg = args[0];
+	struct dhcpv6_reliability const *		rel = *rel_arg;
+	char						buf[PRINT_RELIABILITY_SZ];
+
+	if (!rel)
+		return print_null(stream, info);
+
+	sprintf(buf, "%T+%u/%u", &rel->base_t, rel->rt, rel->num_tries);
+
+	return fprintf(stream, "%*s", get_width(info), buf);
+}
+
+static int print_reliability_arginfo(struct printf_info const *info, size_t n,
+				     int *argtypes, int *sizes)
+{
+	argtypes[0] = PA_POINTER;
+	sizes[0] = sizeof(struct dhcpv6_reliability *);
+
+	return 1;
+}
 
 /* struct dhcpv6_network */
 
@@ -280,7 +326,7 @@ static int print_iaprefix_arginfo(struct printf_info const *info, size_t n,
 
 /* struct dhcpv6_iapd */
 
-#define PRINT_IAPD_STATE_SZ	(sizeof "SOLICATE-INIT")
+#define PRINT_IAPD_STATE_SZ	(sizeof "SOLICIT-INIT")
 
 static char const *dhcp_iapd_state_to_str(enum dhcp_iapd_state s, char *tmp_buf)
 {
@@ -294,8 +340,8 @@ static char const *dhcp_iapd_state_to_str(enum dhcp_iapd_state s, char *tmp_buf)
 		STATE_ELEM(NONE),
 		STATE_ELEM(UNUSED),
 		STATE_ELEM(INIT),
-		STATE_ELEM(SOLICATE_INIT),
-		STATE_ELEM(SOLICATE),
+		STATE_ELEM(SOLICIT_INIT),
+		STATE_ELEM(SOLICIT),
 		STATE_ELEM(REQUEST_INIT),
 		STATE_ELEM(REQUEST),
 		STATE_ELEM(ACTIVE_INIT),
@@ -369,9 +415,9 @@ static int print_iapd(FILE *stream, struct printf_info const *info,
 	ptr += sprintf(ptr, "%u (%s/%s), T1:%T -> %T, T2:%T -> %T, server: %P", iapd->id,
 		       dhcp_iapd_state_to_str(iapd->state, state_buf),
 		       dhcp_iapd_iostate_to_str(iapd->iostate, iostate_buf),
-		       &iapd->pending.lease_t1, &iapd->pending.lease_t2,
-		       &iapd->active.lease_t1, &iapd->active.lease_t2,
-		       &iapd->server.addr.sin6_addr);
+		       &iapd->pending.lease_t1, &iapd->active.lease_t1,
+		       &iapd->pending.lease_t2, &iapd->active.lease_t2,
+		       &iapd->server.addr);
 
 	return fprintf(stream, "%*s", get_width(info), buf);
 }
@@ -387,9 +433,17 @@ static int print_iapd_arginfo(struct printf_info const *info, size_t n,
 
 void logging_register_conversions(void)
 {
+#ifndef TESTSUITE
+	g_startup_time = time_to_ms(time_now());
+#else
+	g_startup_time = 0;
+#endif
+
 	register_printf_specifier('P', print_ipv6, print_ipv6_arginfo);
 	register_printf_specifier('N', print_ipv6_net, print_ipv6_net_arginfo);
 	register_printf_specifier('R', print_iaprefix, print_iaprefix_arginfo);
 	register_printf_specifier('T', print_time, print_time_arginfo);
+	register_printf_specifier('G', print_timeabs, print_time_arginfo);
 	register_printf_specifier('A', print_iapd, print_iapd_arginfo);
+	register_printf_specifier('E', print_reliability, print_reliability_arginfo);
 }

@@ -115,3 +115,19 @@ int dhcpv6_duid_cmp_opt(struct dhcpv6_duid const *a,
 	else
 		return memcmp(a->id, data, len);
 }
+
+void dhcpv6_duid_from_opt(struct dhcpv6_duid *duid,
+			  struct dhcpv6_option_hdr const *opt)
+{
+	void const	*data = dhcpv6_get_option_data(opt);
+	size_t		len = dhcpv6_get_option_len(opt);
+
+	if (len > sizeof duid->id)
+		/* must be validated before calling this function */
+		abort();
+
+	duid->len = len;
+	memcpy(duid->id, data, len);
+
+	dhcpv6_duid_validate(duid);
+}

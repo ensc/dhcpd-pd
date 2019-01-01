@@ -38,7 +38,7 @@ void dhcpv6_reliability_init(struct dhcpv6_reliability *rel,
 {
 	rel->base_t = now;
 	rel->parm   = parm;
-	rel->num_retries = 0;
+	rel->num_tries = 0;
 }
 
 bool
@@ -47,8 +47,8 @@ dhcpv6_reliability_check(struct dhcpv6_reliability const *rel,
 {
 	struct dhcpv6_reliability_parm const *parm = rel->parm;
 
-	if (parm->mrc != 0 && rel->num_retries > parm->mrc) {
-		pr_warn("RELIABILITY: MRC %d exceeded", rel->num_retries);
+	if (parm->mrc != 0 && rel->num_tries > parm->mrc) {
+		pr_warn("RELIABILITY: MRC %d exceeded", rel->num_tries);
 		return false;
 	}
 
@@ -64,18 +64,15 @@ dhcpv6_reliability_check(struct dhcpv6_reliability const *rel,
 	return true;
 }
 
-bool
-dhcpv6_reliability_next(struct dhcpv6_reliability *rel,
-			dhcp_time_t now)
+void
+dhcpv6_reliability_next(struct dhcpv6_reliability *rel, dhcp_time_t now)
 {
 	struct dhcpv6_reliability_parm const *parm = rel->parm;
 
-	if (!dhcpv6_reliability_check(rel, now))
-		return false;
+	++rel->num_tries;
+	rel->base_t = now;
 
-	++rel->num_retries;
-
-	if (rel->num_retries == 1) {
+	if (rel->num_tries == 1) {
 		rel->base_t = now;
 		rel->rt     = rt_rand(parm->irt, 100, 110);
 	} else {
@@ -83,8 +80,6 @@ dhcpv6_reliability_next(struct dhcpv6_reliability *rel,
 		if (rel->rt > parm->mrt)
 			rel->rt = rt_rand(parm->mrt, 90, 110);
 	}
-
-	return true;
 }
 
 #undef LOG_DOMAIN
@@ -176,4 +171,21 @@ void dhcpv6_network_zero(struct dhcpv6_network *a)
 {
 	a->len = 0;
 	memset(a->prefix, 0, sizeof a->prefix);
+}
+
+#define LOG_DOMAIN	LOG_DOMAIN_PKT
+
+unsigned int dhcpv6_read_status_code(void const *code_pkt, size_t len)
+{
+	unsigned int	res = read_be16(code_pkt);
+	char const	*msg = code_pkt + 2;
+
+	len -= 2;
+
+	if (res == 0)
+		pr_info("STATUS: %.*s", (int)len, msg);
+	else
+		pr_warn("STATUS %u: %.*s", res, (int)len, msg);
+
+	return res;
 }

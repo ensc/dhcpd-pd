@@ -39,4 +39,17 @@ inline static bool buffer_add_option(struct dhcp_buffer *buf, unsigned int code,
 	return buffer_add_raw(buf, code, data, len, 0);
 }
 
+
+#include "dhcpv6-util.h"
+
+bool request_init(struct dhcp_buffer *buf, enum dhcpv6_type type,
+		  struct dhcp_context *ctx,
+		  struct dhcpv6_transmission const *xmit);
+
+inline static bool buffer_add_duid(struct dhcp_buffer *buf, unsigned int code,
+				   struct dhcpv6_duid const *duid)
+{
+	return buffer_add_option(buf, code, duid->id, duid->len);
+}
+
 #endif	/* H_ENSC_DHCP_BUFFER_H */

@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include "../src/time.h"
 
-void test_00(void)
+static void test_00(void)
 {
 	dhcp_time_t		tm_a = TIME_EPOCH;
 	dhcp_time_t		tm_b = TIME_INFINITY;
@@ -59,7 +59,7 @@ void test_00(void)
 	assert(time_is_infinity(tm_c));
 }
 
-void test_01(void)
+static void test_01(void)
 {
 	dhcp_time_t		tm_a = { 23 };
 	dhcp_time_t		tm_b = { 42 };
@@ -96,7 +96,7 @@ void test_01(void)
 	assert(time_is_infinity(tm_c));
 }
 
-void test_02(void)
+static void test_02(void)
 {
 	dhcp_time_t		tm_a = time_now();
 	dhcp_time_t		tm_b;

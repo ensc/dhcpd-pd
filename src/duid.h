@@ -52,6 +52,9 @@ struct dhcpv6_option_hdr;
 int dhcpv6_duid_cmp_opt(struct dhcpv6_duid const *a,
 			struct dhcpv6_option_hdr const *b);
 
+void dhcpv6_duid_from_opt(struct dhcpv6_duid *a,
+			  struct dhcpv6_option_hdr const *b);
+
 int dhcpv6_duid_generate(struct dhcpv6_duid *duid);
 
 #endif	/* H_ENSC_DHCP_DUID_H */

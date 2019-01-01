@@ -3,6 +3,7 @@ noinst_PROGRAMS += \
 	tests/00-utils_reliability \
 	tests/00-utils_xmit \
 	tests/00-time \
+	tests/00-buffer \
 	tests/01-logging \
 	tests/99-coverage \
 
@@ -37,6 +38,12 @@ tests/00-time_SOURCES = \
 	tests/test-base.c \
 	src/time.c \
 	src/time.h \
+
+tests/00-buffer_SOURCES = \
+	tests/00-buffer.c \
+	tests/test-base.c \
+	src/buffer.c \
+	src/buffer.h \
 
 tests/01-logging_SOURCES = \
 	tests/01-logging.c \

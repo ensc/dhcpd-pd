@@ -107,6 +107,9 @@ static void test_01(void)
 	x_sprintf(buf, "%pT", &tm_c);
 	assert(strcmp(buf, "23.042") == 0);
 
+	x_sprintf(buf, "%pG", &tm_c);
+	assert(strcmp(buf, "23.042") == 0);
+
 	x_sprintf(buf, "%pT", &tm_d);
 	assert(strcmp(buf, "4Y8D 15:16:23.042") == 0);
 }
@@ -125,6 +128,9 @@ static void test_02(void)
 	assert(strcmp(buf, "<null>") == 0);
 
 	x_sprintf(buf, "%pT", NULL);
+	assert(strcmp(buf, "<null>") == 0);
+
+	x_sprintf(buf, "%pG", NULL);
 	assert(strcmp(buf, "<null>") == 0);
 
 	x_sprintf(buf, "%pA", NULL);

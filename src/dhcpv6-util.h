@@ -21,8 +21,6 @@
 #include <string.h>
 #include <netinet/in.h>
 
-#include "../ensc-lib/list.h"
-
 #include "duid.h"
 #include "time.h"
 
@@ -34,7 +32,7 @@
 #  define TEST_ONLY(_statement)
 #endif
 
-#define DHCPV6_IAPREFIX_PER_IAPD	1
+#define DHCPV6_IAPREFIX_PER_IAPD	(2)
 #define DHCPV6_MAX_MESSAGE_SZ		((size_t)(16 * 1024))
 
 /*****************/
@@ -56,7 +54,7 @@ struct dhcpv6_reliability_parm {
 struct dhcpv6_reliability {
 	dhcp_time_t		base_t;
 	unsigned int		rt;
-	unsigned int		num_retries;
+	unsigned int		num_tries;
 
 	struct dhcpv6_reliability_parm const	*parm;
 };
@@ -72,8 +70,7 @@ void dhcpv6_reliability_init(struct dhcpv6_reliability *rel,
 			     dhcp_time_t now);
 bool dhcpv6_reliability_check(struct dhcpv6_reliability const *rel,
 			      dhcp_time_t now);
-bool dhcpv6_reliability_next(struct dhcpv6_reliability *rel,
-			     dhcp_time_t now);
+void dhcpv6_reliability_next(struct dhcpv6_reliability *rel, dhcp_time_t now);
 
 /*****************/
 
@@ -89,20 +86,20 @@ void dhcpv6_transmission_init(struct dhcpv6_transmission *xmit, dhcp_time_t now)
 struct dhcpv6_server {
 	/* https://tools.ietf.org/html/rfc3315#section-22.3 */
 	struct dhcpv6_duid		id;
-	struct sockaddr_in6		addr;
+	struct in6_addr			addr;
 	bool				has_id;
+
+	bool				is_unicast;
 
 	/* preference; https://tools.ietf.org/html/rfc3315#section-22.8 */
 	unsigned int			preference;
-
-	struct list_head		head;
-	struct list_head		ia_pd;
 };
 
 struct dhcpv6_server_info {
 	struct dhcpv6_option_hdr const *opt;
 	struct sockaddr_in6		addr;
 	unsigned int			pref;
+	bool				is_unicast;
 };
 
 /***************/
@@ -154,9 +151,12 @@ struct dhcp_iaprefix {
 struct dhcp_context {
 	int				fd;
 	int				sig_fd;
+	int				ifidx;
 
 	dhcp_time_t			now;
 	dhcp_time_t			timeout;
+
+	struct dhcpv6_duid const	*client_id;
 
 	bool				sig_available;
 	bool				data_available;
@@ -180,8 +180,8 @@ enum dhcp_iapd_state {
 	IAPD_STATE_NONE,
 	IAPD_STATE_UNUSED,
 	IAPD_STATE_INIT,
-	IAPD_STATE_SOLICATE_INIT,
-	IAPD_STATE_SOLICATE,
+	IAPD_STATE_SOLICIT_INIT,
+	IAPD_STATE_SOLICIT,
 	IAPD_STATE_REQUEST_INIT,
 	IAPD_STATE_REQUEST,
 	IAPD_STATE_ACTIVE_INIT,
@@ -213,7 +213,6 @@ struct dhcp_iapd {
 		dhcp_time_t		lease_t2;
 	}				active, pending;
 
-
 	struct dhcpv6_server		server;
 
 	enum dhcp_iapd_state		state;
@@ -237,5 +236,8 @@ dhcp_time_t	dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now);
 int		dhcp_iapd_run(struct dhcp_iapd *iapd, struct dhcp_context *ctx);
 int		dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 			       struct dhcpv6_message_hdr const *hdr, size_t len);
+
+
+unsigned int	dhcpv6_read_status_code(void const *code_pkt, size_t len);
 
 #endif	/* H_ENSC_DHCP_PD_DHCPV6_UTIL_H */

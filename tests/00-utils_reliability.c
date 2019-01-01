@@ -40,62 +40,69 @@ int main(void)
 		dhcpv6_reliability_init(&rel, &PARM, now);
 
 		/* #1 */
-		assert(dhcpv6_reliability_next(&rel, now));
+		assert(dhcpv6_reliability_check(&rel, now));
+		dhcpv6_reliability_next(&rel, now);
 
-		assert(rel.num_retries == 1);
+		assert(rel.num_tries == 1);
 		assert(rel.rt >= 1000);
 		assert(rel.rt <= 1100);
 
 		rt = rel.rt;
 
 		/* #2: around 2000 */
-		assert(dhcpv6_reliability_next(&rel, now));
-		assert(rel.num_retries == 2);
+		assert(dhcpv6_reliability_check(&rel, now));
+		dhcpv6_reliability_next(&rel, now);
+		assert(rel.num_tries == 2);
 		assert(rel.rt >= rt * 190 / 100);
 		assert(rel.rt <= rt * 210 / 100);
 
 		rt = rel.rt;
 
 		/* #3: around 4000 */
-		assert(dhcpv6_reliability_next(&rel, now));
-		assert(rel.num_retries == 3);
+		assert(dhcpv6_reliability_check(&rel, now));
+		dhcpv6_reliability_next(&rel, now);
+		assert(rel.num_tries == 3);
 		assert(rel.rt >= rt * 190 / 100);
 		assert(rel.rt <= rt * 210 / 100);
 
 		rt = rel.rt;
 
 		/* #4: around 8000 */
-		assert(dhcpv6_reliability_next(&rel, now));
-		assert(rel.num_retries == 4);
+		assert(dhcpv6_reliability_check(&rel, now));
+		dhcpv6_reliability_next(&rel, now);
+		assert(rel.num_tries == 4);
 		assert(rel.rt >= rt * 190 / 100);
 		assert(rel.rt <= rt * 210 / 100);
 
 		rt = PARM.mrt;
 
 		/* #5: MRT reached */
-		assert(dhcpv6_reliability_next(&rel, now));
-		assert(rel.num_retries == 5);
+		assert(dhcpv6_reliability_check(&rel, now));
+		dhcpv6_reliability_next(&rel, now);
+		assert(rel.num_tries == 5);
 		assert(rel.rt >= rt *  90 / 100);
 		assert(rel.rt <= rt * 110 / 100);
 
 		/* #6: MRT reached */
-		assert(dhcpv6_reliability_next(&rel, now));
-		assert(rel.num_retries == 6);
+		assert(dhcpv6_reliability_check(&rel, now));
+		dhcpv6_reliability_next(&rel, now);
+		assert(rel.num_tries == 6);
 		assert(rel.rt >= rt *  90 / 100);
 		assert(rel.rt <= rt * 110 / 100);
 
 		/* #7: MRT reached */
-		assert(dhcpv6_reliability_next(&rel, now));
-		assert(rel.num_retries == 7);
+		assert(dhcpv6_reliability_check(&rel, now));
+		dhcpv6_reliability_next(&rel, now);
+		assert(rel.num_tries == 7);
 		assert(rel.rt >= rt *  90 / 100);
 		assert(rel.rt <= rt * 110 / 100);
 
-		assert(!dhcpv6_reliability_next(&rel, now));
+		assert(!dhcpv6_reliability_check(&rel, now));
 	}
 
 	dhcpv6_reliability_init(&rel, &PARM, now);
-	assert(dhcpv6_reliability_next(&rel, now));
-	assert(dhcpv6_reliability_next(&rel, now));
-
-
+	assert(dhcpv6_reliability_check(&rel, now));
+	dhcpv6_reliability_next(&rel, now);
+	assert(dhcpv6_reliability_check(&rel, now));
+	dhcpv6_reliability_next(&rel, now);
 }

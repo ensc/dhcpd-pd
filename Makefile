@@ -9,7 +9,7 @@ MKDIR_P =	${INSTALL} -d -m 0755
 OPTFLAGS =	-O2 -g3
 CFLAGS_flto =	-flto
 LDFLAGS_flto =	-fuse-linker-plugin
-AM_CFLAGS =	-std=gnu11 -Wall -W -Wno-unused-parameter
+AM_CFLAGS =	-std=gnu11 -Wall -W -Wno-unused-parameter -Wmissing-prototypes
 AM_CPPFLAGS =	-I${srcdir} -D_GNU_SOURCE
 CFLAGS =	${OPTFLAGS} -Werror -D_FORTIFY_SOURCE=2 -fstack-protector -DDEBUG_LEVEL=0xffff ${CFLAGS_flto}
 LDFLAGS =	${LDFLAGS_flto} -Wl,-as-needed

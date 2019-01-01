@@ -22,8 +22,10 @@
 enum {
 	LOG_DOMAIN_RELIABILITY,
 	LOG_DOMAIN_IAPD,
+	LOG_DOMAIN_IAPREFIX,
 	LOG_DOMAIN_MAIN,
 	LOG_DOMAIN_DUID,
+	LOG_DOMAIN_PKT,
 };
 
 #define pr_debug(fmt, ...)	log_msg(L_DEBUG, LOG_DOMAIN, fmt, ##__VA_ARGS__)
@@ -32,8 +34,13 @@ enum {
 #define pr_err(fmt, ...)	log_msg(L_ERR,   LOG_DOMAIN, fmt, ##__VA_ARGS__)
 #define pr_crit(fmt, ...)	log_msg(L_PANIC, LOG_DOMAIN, fmt, ##__VA_ARGS__)
 
-#define pr_enter(fmt, ...)	log_msg(L_DEBUG1 | L_PUSH, LOG_DOMAIN, "{ " fmt, ##__VA_ARGS__)
-#define pr_leave(fmt, ...)	log_msg(L_DEBUG1 | L_POP,  LOG_DOMAIN, fmt " }", ##__VA_ARGS__)
+#define pr_enter(fmt, ...)	\
+	log_msg(L_DEBUG1, LOG_DOMAIN, "{ " fmt, ##__VA_ARGS__); \
+	log_push(L_DEBUG1, LOG_DOMAIN)
+
+#define pr_leave(fmt, ...)	\
+	log_msg(L_DEBUG1 | L_POP,  LOG_DOMAIN, "} " fmt, ##__VA_ARGS__); \
+	LOG_SET_BLOCK_FLAG(L_DEBUG1, LOG_DOMAIN, false)
 
 void logging_register_conversions(void);
 
