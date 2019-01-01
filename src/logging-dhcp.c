@@ -295,8 +295,10 @@ static int print_ipv6_net_arginfo(struct printf_info const *info, size_t n,
 
 /* struct dhcpv6_iaprefix */
 
-#define PRINT_IAPREFIX_SZ	(PRINT_IPV6_NET_SZ + 2 * PRINT_TIME_SZ + \
-				 sizeof " (pref:, valid:)")
+#define PRINT_IAPREFIX_SZ	(PRINT_IPV6_NET_SZ +			\
+				 PRINT_TIME_SZ +			\
+				 2 * 3 * sizeof(unsigned int) +		\
+				 sizeof " tm: (pref:, valid:)")
 
 static int print_iaprefix(FILE *stream, struct printf_info const *info,
 			  void const * const *args)
@@ -309,8 +311,9 @@ static int print_iaprefix(FILE *stream, struct printf_info const *info,
 	if (!iaprefix)
 		return print_null(stream, info);
 
-	ptr += sprintf(ptr, "%N (pref:%T, valid:%T)",
-		       &iaprefix->net, &iaprefix->pref_tm, &iaprefix->valid_tm);
+	ptr += sprintf(ptr, "%N tm:%T (pref:%u, valid:%u)",
+		       &iaprefix->net, &iaprefix->lease_tm,
+		       iaprefix->pref_lt, iaprefix->valid_lt);
 
 	return fprintf(stream, "%*s", get_width(info), buf);
 }
@@ -395,9 +398,10 @@ static char const *dhcp_iapd_iostate_to_str(enum dhcp_iapd_iostate s, char *tmp_
 #define PRINT_IAPD_SZ		(3 * sizeof(unsigned int) +		\
 				 PRINT_IAPD_STATE_SZ +			\
 				 PRINT_IAPD_IOSTATE_SZ +		\
-				 4 * PRINT_TIME_SZ +			\
+				 2 * PRINT_TIME_SZ +			\
+				 4 * 3 * sizeof(unsigned int) +		\
 				 INET6_ADDRSTRLEN +			\
-				 sizeof " (/), T1: -> , T2: -> , server: ")
+				 sizeof " (/), tm:  -> , T1: -> , T2: -> , server: ")
 
 static int print_iapd(FILE *stream, struct printf_info const *info,
 		      void const * const *args)
@@ -412,11 +416,12 @@ static int print_iapd(FILE *stream, struct printf_info const *info,
 	if (!iapd)
 		return print_null(stream, info);
 
-	ptr += sprintf(ptr, "%u (%s/%s), T1:%T -> %T, T2:%T -> %T, server: %P", iapd->id,
+	ptr += sprintf(ptr, "%u (%s/%s), tm: %T -> %T, T1:%u -> %u, T2:%u -> %u, server: %P", iapd->id,
 		       dhcp_iapd_state_to_str(iapd->state, state_buf),
 		       dhcp_iapd_iostate_to_str(iapd->iostate, iostate_buf),
-		       &iapd->pending.lease_t1, &iapd->active.lease_t1,
-		       &iapd->pending.lease_t2, &iapd->active.lease_t2,
+		       &iapd->pending.lease_tm, &iapd->active.lease_tm,
+		       iapd->pending.t1, iapd->active.t1,
+		       iapd->pending.t2, iapd->active.t2,
 		       &iapd->server.addr);
 
 	return fprintf(stream, "%*s", get_width(info), buf);

@@ -30,6 +30,8 @@ struct _dhcp_time {
 typedef struct _dhcp_time	dhcp_time_t;
 
 dhcp_time_t time_now(void);
+dhcp_time_t time_get_margin(dhcp_time_t a, dhcp_time_t b,
+			    unsigned int margin_pct);
 
 inline static int		time_cmp(dhcp_time_t a, dhcp_time_t b)
 {
@@ -89,12 +91,18 @@ inline static dhcp_time_t time_sub(dhcp_time_t a, dhcp_time_t b)
 }
 
 /* https://tools.ietf.org/html/rfc3633#section-10 */
-inline static dhcp_time_t time_add_lt(dhcp_time_t a, uint32_t b)
+inline static dhcp_time_t time_add_lt(dhcp_time_t a, uint32_t b,
+				      unsigned int margin)
 {
 	if (b == 0xffffffff)
 		return TIME_INFINITY;
-	else
-		return time_add_s(a, b);
+	else {
+		uint64_t tmp = b;
+		tmp *= margin;
+		tmp /= 100;
+
+		return time_add_s(a, tmp);
+	}
 }
 
 #endif	/* H_ENSC_DHCP_TIME_H */

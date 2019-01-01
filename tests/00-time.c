@@ -52,10 +52,10 @@ static void test_00(void)
 	tm_c = time_sub(tm_b, tm_a);
 	assert(time_is_infinity(tm_c));
 
-	tm_c = time_add_lt(tm_a, 1);
+	tm_c = time_add_lt(tm_a, 1, 100);
 	assert(time_is_epoch(tm_c));
 
-	tm_c = time_add_lt(tm_b, 1);
+	tm_c = time_add_lt(tm_b, 1, 100);
 	assert(time_is_infinity(tm_c));
 }
 
@@ -89,10 +89,13 @@ static void test_01(void)
 	tm_c = time_sub(tm_b, tm_a);
 	assert(time_to_ms(tm_c) == 19);
 
-	tm_c = time_add_lt(tm_a, 1);
+	tm_c = time_add_lt(tm_a, 1, 100);
 	assert(time_to_ms(tm_c) == 1023);
 
-	tm_c = time_add_lt(tm_a, 0xffffffff);
+	tm_c = time_add_lt(tm_a, 0xffffffff, 100);
+	assert(time_is_infinity(tm_c));
+
+	tm_c = time_add_lt(tm_a, 0xffffffff, 40);
 	assert(time_is_infinity(tm_c));
 }
 

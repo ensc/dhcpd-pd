@@ -140,8 +140,7 @@ struct dhcp_iaprefix {
 	struct dhcpv6_network		net;
 	struct dhcp_iaprefix_pref	preferences;
 
-	dhcp_time_t			pref_tm;
-	dhcp_time_t			valid_tm;
+	dhcp_time_t			lease_tm;
 
 	struct dhcp_iapd		*iapd;
 };
@@ -207,10 +206,9 @@ struct dhcp_iapd {
 	uint32_t			id;
 
 	struct {
+		dhcp_time_t		lease_tm;
 		uint32_t		t1;
 		uint32_t		t2;
-		dhcp_time_t		lease_t1;
-		dhcp_time_t		lease_t2;
 	}				active, pending;
 
 	struct dhcpv6_server		server;

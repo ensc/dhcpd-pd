@@ -31,3 +31,17 @@ dhcp_time_t time_now(void)
 
 	return (dhcp_time_t){ now };
 }
+
+dhcp_time_t time_get_margin(dhcp_time_t a, dhcp_time_t b,
+			    unsigned int margin_pct)
+{
+	uint64_t	delta;
+
+	assert(time_cmp(a, b) < 0);
+
+	delta = time_sub(b, a).tm;
+	delta *= margin_pct;
+	delta /= 100;
+
+	return time_add_ms(a, delta);
+}

@@ -40,6 +40,7 @@ struct dhcp_states {
 
 	bool			req_serverid;	/* matching SERVERID required */
 	bool			no_io;
+	unsigned int		tm_margin;
 };
 
 static struct dhcp_states const	STATES[] = {
@@ -88,6 +89,7 @@ static struct dhcp_states const	STATES[] = {
 		.valid_to	= IAPD_STATE_SOLICIT_INIT,
 		.t1_to		= IAPD_STATE_RENEW_INIT,
 		.t2_to		= IAPD_STATE_REBIND_INIT,
+		.tm_margin	= 20,
 	},
 
 	[IAPD_STATE_RENEW_INIT] = {
@@ -103,6 +105,7 @@ static struct dhcp_states const	STATES[] = {
 		.t2_to		= IAPD_STATE_REBIND_INIT,
 		.done		= IAPD_STATE_ACTIVE_INIT,
 		.error		= IAPD_STATE_REBIND_INIT,
+		.tm_margin	= 100,
 		.req_serverid	= true,
 	},
 
@@ -118,6 +121,7 @@ static struct dhcp_states const	STATES[] = {
 		.valid_to	= IAPD_STATE_SOLICIT_INIT,
 		.done		= IAPD_STATE_ACTIVE_INIT,
 		.error		= IAPD_STATE_SOLICIT_INIT,
+		.tm_margin	= 100,
 	},
 };
 
@@ -157,9 +161,9 @@ static struct dhcpv6_reliability_parm const	dhcpv6_reliability_parm_rebind = {
 
 static void dhcp_iaprefix_validate(struct dhcp_iaprefix const *prefix)
 {
-	assert(time_cmp(prefix->pref_tm, prefix->valid_tm) <= 0);
 	assert(prefix->net.len <= 64);
 	assert(prefix->pref_lt <= prefix->valid_lt);
+	assert(!time_is_infinity(prefix->lease_tm));
 }
 
 static void dhcp_iaprefix_init(struct dhcp_iaprefix *prefix, dhcp_time_t now,
@@ -180,8 +184,7 @@ static void dhcp_iaprefix_init(struct dhcp_iaprefix *prefix, dhcp_time_t now,
 			dhcpv6_network_zero(&prefix->net);
 	}
 
-	prefix->pref_tm = TIME_EPOCH;
-	prefix->valid_tm = TIME_EPOCH;
+	prefix->lease_tm = TIME_EPOCH;
 
 	dhcp_iaprefix_validate(prefix);
 }
@@ -249,35 +252,43 @@ static bool dhcp_iaprefix_is_used(struct dhcp_iaprefix const *iaprefix)
 	return iaprefix->net.len != 0;
 }
 
-static dhcp_time_t dhcp_iapd_min_valid_tm(struct dhcp_iapd const *iapd)
+static dhcp_time_t dhcp_iapd_min_valid_tm(struct dhcp_iapd const *iapd,
+					  unsigned int margin)
 {
 	dhcp_time_t	res = TIME_INFINITY;
 
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
 		struct dhcp_iaprefix const	*prefix = &iapd->iaprefix[i].active;
+		dhcp_time_t			tm;
 
 		if (!dhcp_iaprefix_is_used(prefix))
 			continue;
 
-		if (time_cmp(prefix->valid_tm, res) < 0)
-			res = prefix->valid_tm;
+		tm = time_add_lt(prefix->lease_tm, prefix->valid_lt, margin);
+
+		if (time_cmp(tm, res) < 0)
+			res = tm;
 	}
 
 	return res;
 }
 
-static dhcp_time_t dhcp_iapd_min_pref_tm(struct dhcp_iapd const *iapd)
+static dhcp_time_t dhcp_iapd_min_pref_tm(struct dhcp_iapd const *iapd,
+					 unsigned int margin)
 {
 	dhcp_time_t	res = TIME_INFINITY;
 
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
 		struct dhcp_iaprefix const	*prefix = &iapd->iaprefix[i].active;
+		dhcp_time_t			tm;
 
 		if (!dhcp_iaprefix_is_used(prefix))
 			continue;
 
-		if (time_cmp(prefix->pref_tm, res) < 0)
-			res = prefix->pref_tm;
+		tm = time_add_lt(prefix->lease_tm, prefix->pref_lt, margin);
+
+		if (time_cmp(tm, res) < 0)
+			res = tm;
 	}
 
 	return res;
@@ -290,8 +301,8 @@ static void dhcp_iapd_validate(struct dhcp_iapd const *iapd)
 	assert(iapd->state < ARRAY_SIZE(STATES));
 	assert(iapd->iostate <= IAPD_IOSTATE_TIMEOUT);
 	assert(!state->req_serverid || iapd->server.has_id);
-	assert(time_cmp(iapd->active.lease_t1, iapd->active.lease_t2) <= 0);
-	assert(time_cmp(iapd->pending.lease_t1, iapd->pending.lease_t2) <= 0);
+	assert(iapd->active.t1 <= iapd->active.t2);
+	assert(iapd->pending.t1 <= iapd->pending.t2);
 
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
 		dhcp_iaprefix_validate(&iapd->iaprefix[i].active);
@@ -349,13 +360,22 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 	pr_enter("%pA, reliability %pE", iapd, rel);
 
 	dhcp_iapd_validate(iapd);
+	assert(state->tm_margin != 0 ||
+	       (state->t1_to == IAPD_STATE_NONE &&
+		state->t2_to == IAPD_STATE_NONE &&
+		state->pref_to == IAPD_STATE_NONE &&
+		state->valid_to == IAPD_STATE_NONE));
 
 	if (iapd->state == IAPD_STATE_UNUSED)
 		return TIME_INFINITY;
 
 	/* check #1: test T2 */
 	if (state->t2_to != IAPD_STATE_NONE) {
-		if (time_cmp(iapd->active.lease_t2, now) < 0) {
+		dhcp_time_t	tm = time_add_lt(iapd->active.lease_tm,
+						 iapd->active.t2,
+						 state->tm_margin);
+
+		if (time_cmp(tm, now) < 0) {
 			pr_warn("%s T2 reached; going to %s", state->name,
 				STATES[state->t2_to].name);
 			iapd->state = state->t2_to;
@@ -363,15 +383,14 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 			goto out;
 		}			
 
-		timeout = time_min(timeout, iapd->active.lease_t2);
+		timeout = time_min(timeout, tm);
 	}
 
 	/* check #2: test valid-tm of all iaprefix */
 	if (state->valid_to != IAPD_STATE_NONE) {
 		dhcp_time_t	to;
 
-		to = dhcp_iapd_min_valid_tm(iapd);
-		
+		to = dhcp_iapd_min_valid_tm(iapd, state->tm_margin);	
 		if (time_cmp(to, now) < 0) {
 			pr_warn("%s valid tm %pT reached; going to %s",
 				state->name, &to, STATES[state->valid_to].name);
@@ -385,7 +404,11 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 
 	/* check #3: test T1 */
 	if (state->t1_to != IAPD_STATE_NONE) {
-		if (time_cmp(iapd->active.lease_t1, now) < 0) {
+		dhcp_time_t	tm = time_add_lt(iapd->active.lease_tm,
+						 iapd->active.t1,
+						 state->tm_margin);
+
+		if (time_cmp(tm, now) < 0) {
 			pr_warn("%s T1 reached; going to %s", state->name,
 				STATES[state->t1_to].name);
 			iapd->state = state->t1_to;
@@ -393,14 +416,14 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 			goto out;
 		}			
 
-		timeout = time_min(timeout, iapd->active.lease_t1);
+		timeout = time_min(timeout, tm);
 	}
 
 	/* check #4: test pref-tm of all iaprefix */
 	if (state->pref_to != IAPD_STATE_NONE) {
 		dhcp_time_t	to;
 
-		to = dhcp_iapd_min_pref_tm(iapd);
+		to = dhcp_iapd_min_pref_tm(iapd, state->tm_margin);
 		
 		if (time_cmp(to, now) < 0) {
 			pr_warn("%s pref tm %pT reached; going to %s",
@@ -447,16 +470,14 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 
 		iapd->active.t1 = 0;
 		iapd->active.t2 = 0;
-		iapd->active.lease_t1 = TIME_EPOCH;
-		iapd->active.lease_t2 = TIME_EPOCH;
+		iapd->active.lease_tm = TIME_EPOCH;
 
 		break;
 
 	case IAPD_STATE_SOLICIT_INIT:
 		iapd->pending.t1 = 0;
 		iapd->pending.t2 = 0;
-		iapd->pending.lease_t1 = TIME_EPOCH;
-		iapd->pending.lease_t2 = TIME_EPOCH;
+		iapd->pending.lease_tm = TIME_EPOCH;
 
 		dhcpv6_transmission_init(&iapd->xmit, now);
 
@@ -491,11 +512,6 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 		break;
 
 	case IAPD_STATE_ACTIVE:
-		if (iapd->iostate == IAPD_IOSTATE_NONE)
-			iapd->iostate = IAPD_IOSTATE_WAIT;
-
-		break;
-
 	case IAPD_STATE_SOLICIT:
 	case IAPD_STATE_REBIND:
 	case IAPD_STATE_RENEW:
@@ -588,9 +604,9 @@ static int handle_ia_prefix(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	uint32_t		valid_lt = be32_to_cpu(opt_prefix->valid_lftm);
 	uint32_t		pref_lt = be32_to_cpu(opt_prefix->pref_lftm);
 
-	dhcp_time_t		valid_tm = time_add_lt(ctx->now, valid_lt);
-	dhcp_time_t		pref_tm = time_add_lt(ctx->now, pref_lt);
-
+	dhcp_time_t		valid_tm = time_add_lt(ctx->now, valid_lt, 100);
+	dhcp_time_t		pref_tm = time_add_lt(ctx->now, pref_lt, 100);
+	
 	struct dhcpv6_network	net;
 	int			rc;
 
@@ -628,15 +644,19 @@ static int handle_ia_prefix(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	/* TODO: in case of "same network": check lifetimes too? */
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
 		struct dhcp_iaprefix		*tmp = &iapd->iaprefix[i].pending;
+		dhcp_time_t			tmp_valid =
+			time_add_lt(tmp->lease_tm, tmp->valid_lt, 100);
+		dhcp_time_t			tmp_pref =
+			time_add_lt(tmp->lease_tm, tmp->pref_lt, 100);
 
 		dhcp_iaprefix_validate(tmp);
 
 		if (dhcpv6_network_cmp(&tmp->net, &net) == 0)
 			prefix = tmp;
-		else if (time_cmp(tmp->valid_tm, ctx->now) < 0 ||
+		else if (time_cmp(tmp_valid, ctx->now) < 0 ||
 			 tmp->net.len < net.len ||
-			 time_cmp(tmp->valid_tm, valid_tm) < 0 ||
-			 time_cmp(tmp->pref_tm, pref_tm))
+			 time_cmp(tmp_valid, valid_tm) < 0 ||
+			 time_cmp(tmp_pref, pref_tm))
 			prefix = tmp;
 		else
 			continue;
@@ -652,8 +672,7 @@ static int handle_ia_prefix(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	prefix->net = net;
 	prefix->pref_lt = pref_lt;
 	prefix->valid_lt = valid_lt;
-	prefix->pref_tm = pref_tm;
-	prefix->valid_tm = valid_tm;
+	prefix->lease_tm = ctx->now;
 
 	pr_debug("iaprefix: %pR", prefix);
 
@@ -753,8 +772,7 @@ static int handle_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 
 	iapd->pending.t1 = be32_to_cpu(opt_iapd->t1);
 	iapd->pending.t2 = be32_to_cpu(opt_iapd->t2);
-	iapd->pending.lease_t1 = time_add_lt(ctx->now, iapd->pending.t1);
-	iapd->pending.lease_t2 = time_add_lt(ctx->now, iapd->pending.t2);
+	iapd->pending.lease_tm = ctx->now;
 
 	switch (iapd->state) {
 	case IAPD_STATE_SOLICIT:
@@ -941,6 +959,8 @@ static int send_dhcp_buffer(struct dhcp_iapd *iapd,
 		.sin6_scope_id	= ctx->ifidx,
 	};
 	ssize_t			l;
+
+	pr_debug("sending dhcp buffer of size %zu", buf->len);
 
 	assert(iapd->iostate == IAPD_IOSTATE_SEND);
 
@@ -1133,9 +1153,12 @@ int dhcp_iapd_run(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 		break;
 
 	case IAPD_STATE_ACTIVE:
-		if (iapd->iostate == IAPD_IOSTATE_NONE ||
-		    iapd->iostate == IAPD_IOSTATE_WAIT)
+		if (iapd->iostate == IAPD_IOSTATE_NONE) {
+			iapd->iostate = IAPD_IOSTATE_WAIT;
 			rc = 0;
+		} else if (iapd->iostate == IAPD_IOSTATE_WAIT) {
+			rc = 0;
+		}
 		break;
 
 	default:
