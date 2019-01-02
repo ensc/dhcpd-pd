@@ -334,7 +334,7 @@ static int print_iaprefix_arginfo(struct printf_info const *info, size_t n,
 static char const *dhcp_iapd_state_to_str(enum dhcp_iapd_state s, char *tmp_buf)
 {
 #       define STATE_ELEM(_st) \
-	{ .state = IAPD_STATE_ ## _st, .name = # _st }
+	[IAPD_STATE_ ## _st] = { .state = IAPD_STATE_ ## _st, .name = # _st }
 
 	static struct {
 		enum dhcp_iapd_state	state;
@@ -353,6 +353,8 @@ static char const *dhcp_iapd_state_to_str(enum dhcp_iapd_state s, char *tmp_buf)
 		STATE_ELEM(RENEW),
 		STATE_ELEM(REBIND_INIT),
 		STATE_ELEM(REBIND),
+		STATE_ELEM(RELEASE_INIT),
+		STATE_ELEM(RELEASE),
 	};
 #       undef STATE_ELEM
 
@@ -370,7 +372,7 @@ static char const *dhcp_iapd_state_to_str(enum dhcp_iapd_state s, char *tmp_buf)
 static char const *dhcp_iapd_iostate_to_str(enum dhcp_iapd_iostate s, char *tmp_buf)
 {
 #       define STATE_ELEM(_st) \
-	{ .state = IAPD_IOSTATE_ ## _st, .name = # _st }
+	[IAPD_IOSTATE_ ## _st] = { .state = IAPD_IOSTATE_ ## _st, .name = # _st }
 
 	static struct {
 		enum dhcp_iapd_iostate	state;
@@ -401,7 +403,7 @@ static char const *dhcp_iapd_iostate_to_str(enum dhcp_iapd_iostate s, char *tmp_
 				 2 * PRINT_TIME_SZ +			\
 				 4 * 3 * sizeof(unsigned int) +		\
 				 INET6_ADDRSTRLEN +			\
-				 sizeof " (/), tm:  -> , T1: -> , T2: -> , server: ")
+				 sizeof " (/), tm:  -> , T1: -> , T2: -> , server: quit release")
 
 static int print_iapd(FILE *stream, struct printf_info const *info,
 		      void const * const *args)
@@ -416,9 +418,11 @@ static int print_iapd(FILE *stream, struct printf_info const *info,
 	if (!iapd)
 		return print_null(stream, info);
 
-	ptr += sprintf(ptr, "%u (%s/%s), tm: %T -> %T, T1:%u -> %u, T2:%u -> %u, server: %P", iapd->id,
+	ptr += sprintf(ptr, "%u (%s/%s)%s%s, tm: %T -> %T, T1:%u -> %u, T2:%u -> %u, server: %P", iapd->id,
 		       dhcp_iapd_state_to_str(iapd->state, state_buf),
 		       dhcp_iapd_iostate_to_str(iapd->iostate, iostate_buf),
+		       iapd->do_release ? " release" : "",
+		       iapd->do_quit ? " quit" : "",
 		       &iapd->pending.lease_tm, &iapd->active.lease_tm,
 		       iapd->pending.t1, iapd->active.t1,
 		       iapd->pending.t2, iapd->active.t2,

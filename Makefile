@@ -6,12 +6,15 @@ INSTALL =	install
 INSTALL_BIN =	${INSTALL} -p -m 0755
 MKDIR_P =	${INSTALL} -d -m 0755
 
+#DEBUG_LEVEL ?=	0
+DEBUG_LEVEL ?=	0xffff
+
 OPTFLAGS =	-O2 -g3
 CFLAGS_flto =	-flto
 LDFLAGS_flto =	-fuse-linker-plugin
 AM_CFLAGS =	-std=gnu11 -Wall -W -Wno-unused-parameter -Wmissing-prototypes
 AM_CPPFLAGS =	-I${srcdir} -D_GNU_SOURCE
-CFLAGS =	${OPTFLAGS} -Werror -D_FORTIFY_SOURCE=2 -fstack-protector -DDEBUG_LEVEL=0xffff ${CFLAGS_flto}
+CFLAGS =	${OPTFLAGS} -Werror -D_FORTIFY_SOURCE=2 -fstack-protector -DDEBUG_LEVEL=${DEBUG_LEVEL} ${CFLAGS_flto}
 LDFLAGS =	${LDFLAGS_flto} -Wl,-as-needed
 LDLIBS  =	-lcrypto
 PROFILE_FLAGS =	--coverage -fprofile-dir=${builddir}/.gcov/${@F} -fprofile-abs-path -fno-inline

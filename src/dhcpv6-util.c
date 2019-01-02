@@ -77,7 +77,7 @@ dhcpv6_reliability_next(struct dhcpv6_reliability *rel, dhcp_time_t now)
 		rel->rt     = rt_rand(parm->irt, 100, 110);
 	} else {
 		rel->rt     = rt_rand(rel->rt, 190, 210);
-		if (rel->rt > parm->mrt)
+		if (parm->mrt != 0 && rel->rt > parm->mrt)
 			rel->rt = rt_rand(parm->mrt, 90, 110);
 	}
 }

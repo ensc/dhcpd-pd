@@ -89,7 +89,7 @@ static struct dhcp_states const	STATES[] = {
 		.valid_to	= IAPD_STATE_SOLICIT_INIT,
 		.t1_to		= IAPD_STATE_RENEW_INIT,
 		.t2_to		= IAPD_STATE_REBIND_INIT,
-		.tm_margin	= 20,
+		.tm_margin	= 80,
 	},
 
 	[IAPD_STATE_RENEW_INIT] = {
@@ -123,6 +123,20 @@ static struct dhcp_states const	STATES[] = {
 		.error		= IAPD_STATE_SOLICIT_INIT,
 		.tm_margin	= 100,
 	},
+
+	[IAPD_STATE_RELEASE_INIT] = {
+		.name		= "RELEASE-INIT",
+		.done		= IAPD_STATE_RELEASE,
+		.no_io		= true,
+	},
+
+	[IAPD_STATE_RELEASE] = {
+		.name		= "RELEASE",
+		.rel_to		= IAPD_STATE_INIT,
+		.done		= IAPD_STATE_SOLICIT_INIT,
+		.tm_margin	= 100,
+		.req_serverid	= true,
+	},
 };
 
 /** https://tools.ietf.org/html/rfc3315#section-5.5 */
@@ -154,6 +168,13 @@ static struct dhcpv6_reliability_parm const	dhcpv6_reliability_parm_rebind = {
 	.irt	= 1000,
 	.mrt	= 60000,
 	.mrc	= 0,
+	.mrd	= 0,			/* will be checked in code */
+};
+
+static struct dhcpv6_reliability_parm const	dhcpv6_reliability_parm_release = {
+	.irt	= 1000,
+	.mrt	= 0,
+	.mrc	= 5,
 	.mrd	= 0,			/* will be checked in code */
 };
 
@@ -341,6 +362,10 @@ static void finish_ia_pd(struct dhcp_iapd *iapd)
 		++num_prefix;
 	}
 
+	if (iapd->state == IAPD_STATE_RELEASE)
+		/* add a dummy prefix for RELEASE */
+		++num_prefix;
+
 	if (num_prefix == 0) {
 		pr_warn("IAPD: finished without valid prefix (%pA)", iapd);
 		iapd->iostate = IAPD_IOSTATE_ERROR;
@@ -475,6 +500,8 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 		break;
 
 	case IAPD_STATE_SOLICIT_INIT:
+		iapd->do_release = false;
+		iapd->do_renew   = false;
 		iapd->pending.t1 = 0;
 		iapd->pending.t2 = 0;
 		iapd->pending.lease_tm = TIME_EPOCH;
@@ -503,6 +530,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 	case IAPD_STATE_RENEW_INIT:
 		dhcpv6_reliability_init(rel, &dhcpv6_reliability_parm_renew, now);
 		dhcpv6_transmission_init(&iapd->xmit, now);
+		iapd->do_renew = false;
 		break;
 
 	case IAPD_STATE_REBIND_INIT:
@@ -511,16 +539,26 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 		iapd->server.has_id = false;
 		break;
 
+	case IAPD_STATE_RELEASE_INIT:
+		dhcpv6_reliability_init(rel, &dhcpv6_reliability_parm_release, now);
+		dhcpv6_transmission_init(&iapd->xmit, now);
+		break;
+
 	case IAPD_STATE_ACTIVE:
 	case IAPD_STATE_SOLICIT:
 	case IAPD_STATE_REBIND:
+	case IAPD_STATE_RELEASE:
 	case IAPD_STATE_RENEW:
 	case IAPD_STATE_REQUEST:
 		break;
 	}
 
-	if (state->no_io)
+	if (iapd->state == IAPD_STATE_SOLICIT_INIT && iapd->do_quit) {
+		iapd->iostate = IAPD_IOSTATE_WAIT;
+		timeout = TIME_EPOCH;
+	} else if (state->no_io) {
 		iapd->iostate = IAPD_IOSTATE_DONE;
+	}
 
 	/* regular iostate transition */
 
@@ -561,14 +599,21 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 
 		break;
 
-	case IAPD_IOSTATE_NONE:
 	case IAPD_IOSTATE_WAIT:
+		if (iapd->do_release) {
+			iapd->state = IAPD_STATE_RELEASE_INIT;
+			iapd->iostate = IAPD_IOSTATE_NONE;
+		} else if (iapd->do_renew) {
+			iapd->state = IAPD_STATE_RENEW_INIT;
+			iapd->iostate = IAPD_IOSTATE_NONE;
+		}
+		break;
+
+	case IAPD_IOSTATE_NONE:
 	case IAPD_IOSTATE_SEND:
 	case IAPD_IOSTATE_TIMEOUT:
 		break;
 	}
-
-
 
 out:
 	dhcp_iapd_validate(iapd);
@@ -783,7 +828,6 @@ static int handle_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 		iapd->server.preference = ctx->server.pref;
 		iapd->server.has_id = true;
 		iapd->server.is_unicast = ctx->server.is_unicast;
-
 		break;
 
 	case IAPD_STATE_REQUEST:
@@ -821,6 +865,7 @@ int dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 
 	case DHCPV6_TYPE_REPLY:
 		resp_matching = (iapd->state == IAPD_STATE_REQUEST ||
+				 iapd->state == IAPD_STATE_RELEASE ||
 				 iapd->state == IAPD_STATE_RENEW ||
 				 iapd->state == IAPD_STATE_REBIND);
 		break;
@@ -896,6 +941,7 @@ int dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 		goto out;
 
 	if (ctx->server.pref == 255 ||
+	    iapd->state == IAPD_STATE_RELEASE ||
 	    iapd->state == IAPD_STATE_REQUEST ||
 	    iapd->state == IAPD_STATE_RENEW)
 		finish_ia_pd(iapd);
@@ -973,6 +1019,9 @@ static int send_dhcp_buffer(struct dhcp_iapd *iapd,
 
 	l = sendto(ctx->fd, buf->data, buf->len, 0, &addr, sizeof addr);
 	if (l < 0) {
+		if (errno == ENETUNREACH)
+			ctx->err_no_net = true;
+
 		pr_err("sendto(): %s", strerror(errno));
 		iapd->iostate = IAPD_IOSTATE_ERROR;
 		return -1;
@@ -1119,6 +1168,38 @@ static int send_rebind(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 	return 0;
 }
 
+static int send_release(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
+{
+	unsigned char		raw[DHCPV6_MAX_DUID_SZ + 512];
+	struct dhcp_buffer	buf = {
+		.data		= raw,
+		.len		= 0,
+		.max_len	= sizeof raw,
+	};
+
+	struct dhcpv6_option_iapd	opt_iapd = {
+		.id	= CPU_TO_BE32(iapd->id),
+		.t1	= CPU_TO_BE32(iapd->active.t1),
+		.t2	= CPU_TO_BE32(iapd->active.t2),
+	};
+
+	int			rc;
+
+	if (!request_init(&buf, DHCPV6_TYPE_RELEASE, ctx, &iapd->xmit) ||
+	    !buffer_add_duid(&buf, DHCPV6_OPTION_SERVERID, &iapd->server.id) ||
+	    !fill_iapd_option(&buf, iapd, &opt_iapd, IAPD_PREFIX_SEL_ACTIVE)) {
+		pr_err("RELEASE: failed to initialize DHCPv6 message");
+		iapd->iostate = IAPD_IOSTATE_ERROR;
+		return -1;
+	}
+
+	rc = send_dhcp_buffer(iapd, ctx, &buf, &iapd->server);
+	if (rc < 0)
+		return -1;
+
+	return 0;
+}
+
 int dhcp_iapd_run(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 {
 	struct dhcp_states const	*state = &STATES[iapd->state];
@@ -1149,6 +1230,12 @@ int dhcp_iapd_run(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 	case IAPD_STATE_REBIND:
 		if (iapd->iostate == IAPD_IOSTATE_SEND)
 			rc = send_rebind(iapd, ctx);
+
+		break;
+
+	case IAPD_STATE_RELEASE:
+		if (iapd->iostate == IAPD_IOSTATE_SEND)
+			rc = send_release(iapd, ctx);
 
 		break;
 

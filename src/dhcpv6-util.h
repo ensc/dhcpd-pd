@@ -159,6 +159,9 @@ struct dhcp_context {
 
 	bool				sig_available;
 	bool				data_available;
+	bool				nl_available;
+	bool				err_no_net;
+	bool				no_io;
 
 	struct dhcpv6_server_info	server;
 	enum dhcpv6_status_code		status_code;
@@ -189,6 +192,8 @@ enum dhcp_iapd_state {
 	IAPD_STATE_RENEW,
 	IAPD_STATE_REBIND_INIT,
 	IAPD_STATE_REBIND,
+	IAPD_STATE_RELEASE_INIT,
+	IAPD_STATE_RELEASE,
 };
 
 enum dhcp_iapd_iostate {
@@ -221,6 +226,10 @@ struct dhcp_iapd {
 	struct dhcpv6_transmission	xmit;
 	struct dhcp_iapd_pref		preferences;
 
+	bool				do_release:1;
+	bool				do_quit:1;
+	bool				do_renew:1;
+
 	struct {
 		struct dhcp_iaprefix	active;
 		struct dhcp_iaprefix	pending;
@@ -234,7 +243,6 @@ dhcp_time_t	dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now);
 int		dhcp_iapd_run(struct dhcp_iapd *iapd, struct dhcp_context *ctx);
 int		dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 			       struct dhcpv6_message_hdr const *hdr, size_t len);
-
 
 unsigned int	dhcpv6_read_status_code(void const *code_pkt, size_t len);
 
