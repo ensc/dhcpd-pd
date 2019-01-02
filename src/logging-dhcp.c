@@ -237,9 +237,9 @@ static int print_time_arginfo(struct printf_info const *info, size_t n,
 
 #include "dhcpv6-util.h"
 
-#define PRINT_RELIABILITY_SZ	(PRINT_TIME_SZ +		\
+#define PRINT_RELIABILITY_SZ	(2 * PRINT_TIME_SZ +		\
 				 2 * 3 * sizeof(unsigned int) + \
-				 sizeof "+/")
+				 sizeof ": + ")
 
 static int print_reliability(FILE *stream, struct printf_info const *info,
 			     void const * const *args)
@@ -251,7 +251,7 @@ static int print_reliability(FILE *stream, struct printf_info const *info,
 	if (!rel)
 		return print_null(stream, info);
 
-	sprintf(buf, "%T+%u/%u", &rel->base_t, rel->rt, rel->num_tries);
+	sprintf(buf, "%T: %T+%u %u", &rel->start_t, &rel->rt_t, rel->rt, rel->num_tries);
 
 	return fprintf(stream, "%*s", get_width(info), buf);
 }

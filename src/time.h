@@ -96,6 +96,8 @@ inline static dhcp_time_t time_add_lt(dhcp_time_t a, uint32_t b,
 {
 	if (b == 0xffffffff)
 		return TIME_INFINITY;
+	else if (b == 0)
+		return TIME_EPOCH;
 	else {
 		uint64_t tmp = b;
 		tmp *= margin;

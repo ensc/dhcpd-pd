@@ -1,1 +1,1 @@
-COMPONENTS = list logging
+COMPONENTS = logging systemd

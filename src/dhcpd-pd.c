@@ -38,13 +38,13 @@
 #include <netinet/in.h>
 #include <net/if.h>
 
+#include <ensc-lib/sd-notify.h>
+
 #include "dhcpv6.h"
 #include "dhcpv6-util.h"
 #include "logging.h"
 
 #define NUM_IAPD_PER_IFACE	(1)
-
-#define LOG_DOMAIN		LOG_DOMAIN_MAIN
 
 struct dhcp_session {
 	int			fd;
@@ -64,10 +64,7 @@ struct dhcp_session {
 	struct dhcp_iapd	iapd[NUM_IAPD_PER_IFACE];
 };
 
-union x_sockaddr {
-	struct sockaddr		generic;
-	struct sockaddr_in6	in6;
-};
+#define LOG_DOMAIN	LOG_DOMAIN_NETLINK
 
 static int dhcp_request_netlink_info(struct dhcp_session *ses)
 {
@@ -137,17 +134,163 @@ static int dhcp_init_netlink(struct dhcp_session *ses)
 	return 0;
 }
 
+static int dhcp_handle_rtm_addr(struct dhcp_session *ses,
+				 struct nlmsghdr const *hdr)
+{
+	char			if_buf[IF_NAMESIZE];
+	char const		*if_name;
+	struct ifaddrmsg const	*msg;
+	size_t			len = hdr->nlmsg_len;
+	struct in6_addr		addr;
+	bool			have_addr = false;
+
+
+	msg = NLMSG_DATA(hdr);
+	if (len < NLMSG_LENGTH(sizeof *msg)) {
+		pr_err("NETLINK: message too small (%zu)", len);
+		return -1;
+	}
+
+	if (msg->ifa_family != AF_INET6) {
+		/* should not happen */
+		pr_warn("not IPv6");
+		return -1;
+	}
+
+	if (msg->ifa_scope != RT_SCOPE_LINK) {
+		pr_debug("no link-scope");
+		return 0;
+	}
+
+	if (hdr->nlmsg_type == RTM_NEWADDR &&
+	    (msg->ifa_flags & IFA_F_TENTATIVE)) {
+		pr_debug("ignoring tentative state");
+		return 0;
+	}
+
+	if_name = if_indextoname(msg->ifa_index, if_buf);
+	if (!if_name) {
+		pr_debug("can not map ifidx %d: %s",
+			 msg->ifa_index, strerror(errno));
+		return -1;
+	}
+
+	if (strcmp(if_name, ses->ifname) != 0) {
+		pr_debug("not for us (%s)", if_name);
+		return 0;
+	}
+
+	for (struct rtattr const *rta = IFA_RTA(msg); RTA_OK(rta, len);
+	     rta = RTA_NEXT(rta, len)) {
+		void const	*rta_data = RTA_DATA(rta);
+		size_t		rta_len  = RTA_PAYLOAD(rta);
+
+		switch (rta->rta_type) {
+		case IFA_ADDRESS:
+			if (rta_len < sizeof addr) {
+				pr_warn("insufficient space for IFA_ADDRESS");
+			} else {
+				memcpy(&addr, rta_data, sizeof addr);
+				have_addr = true;
+			}
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	if (!have_addr) {
+		pr_warn("no IFA_ADDRESS option");
+		return 0;
+	}
+
+	if (hdr->nlmsg_type == RTM_NEWADDR) {
+		ses->ifaddr = addr;
+		ses->ifidx  = msg->ifa_index;
+		ses->link_is_up = true;
+		ses->do_reopen = true;
+		pr_info("link is up with IP %pP", &addr);
+	} else if (hdr->nlmsg_type == RTM_DELADDR &&
+		   memcmp(&ses->ifaddr, &addr, sizeof ses->ifaddr) == 0) {
+		ses->link_is_up = false;
+		ses->link_going_down = true;
+		pr_info("addr %pP removed from link", &addr);
+
+		sd_notify(0, "RELOADING=1");
+	}
+
+	return 0;
+}
+
+static int dhcp_handle_netlink(struct dhcp_session *ses)
+{
+	unsigned char		raw_buf[64 * 1024];
+	struct iovec		iov = {
+		.iov_base	= raw_buf,
+		.iov_len	= sizeof raw_buf,
+	};
+	struct sockaddr_nl	sa;
+	struct msghdr		msg = {
+		.msg_name	= &sa,
+		.msg_namelen	= sizeof sa,
+		.msg_iov	= &iov,
+		.msg_iovlen	= 1,
+	};
+	ssize_t			l;
+
+
+	l = recvmsg(ses->nl_fd, &msg, 0);
+	if (l < 0) {
+		pr_err("recvmsg(>NETLINK): %s", strerror(errno));
+		return -1;
+	}
+
+	for (struct nlmsghdr *nh = (void *)raw_buf; NLMSG_OK(nh, l);
+	     nh = NLMSG_NEXT(nh, l)) {
+		bool		do_break = false;
+
+		switch (nh->nlmsg_type) {
+		case NLMSG_DONE:
+			do_break = true;
+			break;
+
+		case NLMSG_ERROR: {
+			struct nlmsgerr const	*err = NLMSG_DATA(nh);
+			pr_err("NETLINK: %s", strerror(-err->error));
+			do_break = true;
+			break;
+		}
+
+		case RTM_NEWADDR:
+		case RTM_DELADDR:
+			dhcp_handle_rtm_addr(ses, nh);
+			break;
+
+		default:
+			pr_warn("NETLINK: unsupported type %d", nh->nlmsg_type);
+			break;
+		}
+
+		if (do_break)
+			break;
+	}
+
+	return 0;
+}
+
+#undef LOG_DOMAIN
+#define LOG_DOMAIN		LOG_DOMAIN_MAIN
+
 static int dhcp_session_reopen(struct dhcp_session *ses)
 {
 	int			ONE = 1;
 	int			fd;
-	union x_sockaddr	addr = {
-		.in6 = {
-			.sin6_family	= AF_INET6,
-			.sin6_port	= htons(546),
-			.sin6_scope_id	= ses->ifidx,
-			.sin6_addr	= ses->ifaddr,
-		}
+	struct sockaddr_in6	addr = {
+		.sin6_family	= AF_INET6,
+		.sin6_port	= htons(546),
+		.sin6_scope_id	= ses->ifidx,
+		.sin6_addr	= ses->ifaddr,
 	};
 	int			rc;
 
@@ -171,7 +314,7 @@ static int dhcp_session_reopen(struct dhcp_session *ses)
 		goto err;
 	}
 
-	rc = bind(fd, &addr.generic, sizeof addr);
+	rc = bind(fd, &addr, sizeof addr);
 	if (rc < 0) {
 		pr_err("bind(): %s", strerror(errno));
 		rc = EX_OSERR;
@@ -181,11 +324,13 @@ static int dhcp_session_reopen(struct dhcp_session *ses)
 	for (size_t i = 0; i < ARRAY_SIZE(ses->iapd); ++i) {
 		struct dhcp_iapd	*iapd = &ses->iapd[i];
 
-		iapd->do_renew = true;
+		iapd->do_request = true;
 	}
 
 	ses->fd        = fd;
 	ses->do_reopen = false;
+
+	sd_notify(0, "READY=1");
 
 	return 0;
 
@@ -246,6 +391,17 @@ static void dhcp_handle_signal(struct dhcp_session *ses, int sig_fd)
 	pr_info("got signal %d", fdsi.ssi_signo);
 
 	switch (fdsi.ssi_signo) {
+	case SIGUSR1:
+		for (size_t i = 0; i < ARRAY_SIZE(ses->iapd); ++i) {
+			struct dhcp_iapd	*iapd = &ses->iapd[i];
+
+			iapd->do_request = true;
+
+			iapd->iaprefix[0].active.net.prefix[0] = 3;
+			iapd->iaprefix[0].pending.net.prefix[0] = 3;
+		}
+		break;
+
 	case SIGUSR2:
 		for (size_t i = 0; i < ARRAY_SIZE(ses->iapd); ++i) {
 			struct dhcp_iapd	*iapd = &ses->iapd[i];
@@ -261,6 +417,9 @@ static void dhcp_handle_signal(struct dhcp_session *ses, int sig_fd)
 			iapd->do_release = true;
 			iapd->do_quit = true;
 		}
+
+		if (ses->num_quit == 0)
+			sd_notify(0, "STOPPING=1");
 
 		++ses->num_quit;
 		break;
@@ -382,149 +541,6 @@ static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *c
 
 out:
 	return rc;
-}
-
-static int dhcp_handle_rtm_addr(struct dhcp_session *ses,
-				 struct nlmsghdr const *hdr)
-{
-	char			if_buf[IF_NAMESIZE];
-	char const		*if_name;
-	struct ifaddrmsg const	*msg;
-	size_t			len = hdr->nlmsg_len;
-	struct in6_addr		addr;
-	bool			have_addr = false;
-
-
-	msg = NLMSG_DATA(hdr);
-	if (len < NLMSG_LENGTH(sizeof *msg)) {
-		pr_err("NETLINK: message too small (%zu)", len);
-		return -1;
-	}
-
-	if (msg->ifa_family != AF_INET6) {
-		/* should not happen */
-		pr_warn("not IPv6");
-		return -1;
-	}
-
-	if (msg->ifa_scope != RT_SCOPE_LINK) {
-		pr_debug("no link-scope");
-		return 0;
-	}
-
-	if (hdr->nlmsg_type == RTM_NEWADDR &&
-	    (msg->ifa_flags & IFA_F_TENTATIVE)) {
-		pr_debug("ignoring tentative state");
-		return 0;
-	}
-
-	if_name = if_indextoname(msg->ifa_index, if_buf);
-	if (!if_name) {
-		pr_debug("can not map ifidx %d: %s",
-			 msg->ifa_index, strerror(errno));
-		return -1;
-	}
-
-	if (strcmp(if_name, ses->ifname) != 0) {
-		pr_debug("not for us (%s)", if_name);
-		return 0;
-	}
-
-	for (struct rtattr const *rta = IFA_RTA(msg); RTA_OK(rta, len);
-	     rta = RTA_NEXT(rta, len)) {
-		void const	*rta_data = RTA_DATA(rta);
-		size_t		rta_len  = RTA_PAYLOAD(rta);
-
-		switch (rta->rta_type) {
-		case IFA_ADDRESS:
-			if (rta_len < sizeof addr) {
-				pr_warn("insufficient space for IFA_ADDRESS");
-			} else {
-				memcpy(&addr, rta_data, sizeof addr);
-				have_addr = true;
-			}
-			break;
-
-		default:
-			break;
-		}
-	}
-
-	if (!have_addr) {
-		pr_warn("no IFA_ADDRESS option");
-		return 0;
-	}
-
-	if (hdr->nlmsg_type == RTM_NEWADDR) {
-		ses->ifaddr = addr;
-		ses->ifidx  = msg->ifa_index;
-		ses->link_is_up = true;
-		ses->do_reopen = true;
-		pr_info("link is up with IP %pP", &addr);
-	} else if (hdr->nlmsg_type == RTM_DELADDR &&
-		   memcmp(&ses->ifaddr, &addr, sizeof ses->ifaddr) == 0) {
-		ses->link_is_up = false;
-		ses->link_going_down = true;
-		pr_info("addr %pP removed from link", &addr);
-	}
-
-	return 0;
-}
-
-static int dhcp_handle_netlink(struct dhcp_session *ses)
-{
-	unsigned char		raw_buf[64 * 1024];
-	struct iovec		iov = {
-		.iov_base	= raw_buf,
-		.iov_len	= sizeof raw_buf,
-	};
-	struct sockaddr_nl	sa;
-	struct msghdr		msg = {
-		.msg_name	= &sa,
-		.msg_namelen	= sizeof sa,
-		.msg_iov	= &iov,
-		.msg_iovlen	= 1,
-	};
-	ssize_t			l;
-
-
-	l = recvmsg(ses->nl_fd, &msg, 0);
-	if (l < 0) {
-		pr_err("recvmsg(>NETLINK): %s", strerror(errno));
-		return -1;
-	}
-
-	for (struct nlmsghdr *nh = (void *)raw_buf; NLMSG_OK(nh, l);
-	     nh = NLMSG_NEXT(nh, l)) {
-		bool		do_break = false;
-
-		switch (nh->nlmsg_type) {
-		case NLMSG_DONE:
-			do_break = true;
-			break;
-
-		case NLMSG_ERROR: {
-			struct nlmsgerr const	*err = NLMSG_DATA(nh);
-			pr_err("NETLINK: %s", strerror(-err->error));
-			do_break = true;
-			break;
-		}
-
-		case RTM_NEWADDR:
-		case RTM_DELADDR:
-			dhcp_handle_rtm_addr(ses, nh);
-			break;
-
-		default:
-			pr_warn("NETLINK: unsupported type %d", nh->nlmsg_type);
-			break;
-		}
-
-		if (do_break)
-			break;
-	}
-
-	return 0;
 }
 
 static int dhcp_read_response(struct dhcp_session *ses, struct dhcp_context *ctx)
@@ -742,6 +758,7 @@ int main(int argc, char *argv[])
 
 	sigemptyset(&sig_mask);
 	sigaddset(&sig_mask, SIGHUP);
+	sigaddset(&sig_mask, SIGUSR1);
 	sigaddset(&sig_mask, SIGUSR2);
 	sigaddset(&sig_mask, SIGINT);
 
@@ -801,6 +818,7 @@ int main(int argc, char *argv[])
 		}
 
 		if (!session.link_is_up ||
+		    session.do_reopen ||
 		    time_cmp(ctx.now, ctx.timeout) < 0) {
 			if (do_quit) {
 				/* ensure that we read the special 5x SIGUSR
@@ -811,6 +829,8 @@ int main(int argc, char *argv[])
 			rc = dhcp_wait(&session, &ctx);
 			if (rc >= 0)
 				err_cnt = 0;
+
+			sd_notify(0, "WATCHDOG=1");
 		} else {
 			rc = dhcp_iapd_run(next_iapd, &ctx);
 			if (rc < 0)
@@ -837,6 +857,7 @@ int main(int argc, char *argv[])
 			dhcp_handle_netlink(&session);
 
 		if (ctx.err_no_net) {
+			sd_notify(0, "RELOADING=1");
 			session.do_reopen = true;
 			session.link_is_up = false;
 

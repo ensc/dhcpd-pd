@@ -66,6 +66,7 @@ enum dhcpv6_option {
 enum dhcpv6_status_code {
 	DHCPV6_STATUS_CODE_SUCCESS		= 0,
 	DHCPV6_STATUS_CODE_NOADDRSAVAIL		= 2,
+	DHCPV6_STATUS_CODE_NOPREFIXAVAIL	= 6,
 };
 
 inline static char const *dhcpv6_option_to_str(enum dhcpv6_option option)

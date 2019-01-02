@@ -32,7 +32,7 @@
 #  define TEST_ONLY(_statement)
 #endif
 
-#define DHCPV6_IAPREFIX_PER_IAPD	(2)
+#define DHCPV6_IAPREFIX_PER_IAPD	(1)
 #define DHCPV6_MAX_MESSAGE_SZ		((size_t)(16 * 1024))
 
 /*****************/
@@ -52,7 +52,8 @@ struct dhcpv6_reliability_parm {
 
 /** https://tools.ietf.org/html/rfc3315#section-14 */
 struct dhcpv6_reliability {
-	dhcp_time_t		base_t;
+	dhcp_time_t		start_t;
+	dhcp_time_t		rt_t;
 	unsigned int		rt;
 	unsigned int		num_tries;
 
@@ -62,7 +63,7 @@ struct dhcpv6_reliability {
 inline static dhcp_time_t
 dhcpv6_reliability_get_rt(struct dhcpv6_reliability const *rel)
 {
-	return time_add_ms(rel->base_t, rel->rt);
+	return time_add_ms(rel->rt_t, rel->rt);
 }
 
 void dhcpv6_reliability_init(struct dhcpv6_reliability *rel,
@@ -229,6 +230,7 @@ struct dhcp_iapd {
 	bool				do_release:1;
 	bool				do_quit:1;
 	bool				do_renew:1;
+	bool				do_request:1;
 
 	struct {
 		struct dhcp_iaprefix	active;

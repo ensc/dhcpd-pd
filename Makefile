@@ -43,9 +43,10 @@ sbin_PROGRAMS = \
 noinst_PROGRAMS =
 
 dhcpd-pd_SOURCES = \
-	ensc-lib/list.h \
 	ensc-lib/logging.c \
 	ensc-lib/logging.h \
+	ensc-lib/sd-notify.h \
+	ensc-lib/sd-notify.c \
 	src/buffer.c \
 	src/buffer.h \
 	src/dhcpv6-util.c \

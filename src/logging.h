@@ -26,6 +26,7 @@ enum {
 	LOG_DOMAIN_MAIN,
 	LOG_DOMAIN_DUID,
 	LOG_DOMAIN_PKT,
+	LOG_DOMAIN_NETLINK,
 };
 
 #define pr_debug(fmt, ...)	log_msg(L_DEBUG, LOG_DOMAIN, fmt, ##__VA_ARGS__)

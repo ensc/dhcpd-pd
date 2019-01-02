@@ -36,8 +36,9 @@ void dhcpv6_reliability_init(struct dhcpv6_reliability *rel,
 			     struct dhcpv6_reliability_parm const *parm,
 			     dhcp_time_t now)
 {
-	rel->base_t = now;
-	rel->parm   = parm;
+	rel->start_t = now;
+	rel->rt_t    = now;
+	rel->parm    = parm;
 	rel->num_tries = 0;
 }
 
@@ -53,7 +54,7 @@ dhcpv6_reliability_check(struct dhcpv6_reliability const *rel,
 	}
 
 	if (parm->mrd != 0) {
-		dhcp_time_t	tm_exp = time_add_ms(rel->base_t, parm->mrd);
+		dhcp_time_t	tm_exp = time_add_ms(rel->start_t, parm->mrd);
 
 		if (time_cmp(tm_exp, now) < 0) {
 			pr_warn("RELIABILITY: MRD exceeded");
@@ -70,13 +71,12 @@ dhcpv6_reliability_next(struct dhcpv6_reliability *rel, dhcp_time_t now)
 	struct dhcpv6_reliability_parm const *parm = rel->parm;
 
 	++rel->num_tries;
-	rel->base_t = now;
+	rel->rt_t = now;
 
 	if (rel->num_tries == 1) {
-		rel->base_t = now;
-		rel->rt     = rt_rand(parm->irt, 100, 110);
+		rel->rt = rt_rand(parm->irt, 100, 110);
 	} else {
-		rel->rt     = rt_rand(rel->rt, 190, 210);
+		rel->rt = rt_rand(rel->rt, 190, 210);
 		if (parm->mrt != 0 && rel->rt > parm->mrt)
 			rel->rt = rt_rand(parm->mrt, 90, 110);
 	}

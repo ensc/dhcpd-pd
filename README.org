@@ -1,0 +1,15 @@
+* Overview
+
+=dhcp-pd= is a DHCPv6 client for IPv6 Prefix delegation (RFC 3633).
+It implements only the required network operations and calls scripts
+which have to do the interface configuration.
+
+
+* Requirements:
+
+ - OpenSSL (for SHA hashing of the client uid)
+
+
+* TODOs
+
+ - add in-source SHA algorithm to avoid OpenSSL dep
