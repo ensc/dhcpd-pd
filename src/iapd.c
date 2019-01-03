@@ -16,10 +16,7 @@
 
 #include "dhcpv6-util.h"
 
-#include <stdbool.h>
-#include <stdlib.h>
 #include <errno.h>
-#include <sys/param.h>
 #include <arpa/inet.h>
 
 #include "../ensc-lib/compiler.h"
@@ -229,7 +226,7 @@ static bool buffer_add_iaprefix(struct dhcp_buffer *buf,
 				enum iapd_prefix_selection sel)
 {
 	struct dhcpv6_option_iaprefix	opt;
-	void const			*net;
+	struct in6_addr const		*net;
 
 	if (sel != IAPD_PREFIX_SEL_PREF) {
 		opt = (struct dhcpv6_option_iaprefix) {
@@ -241,7 +238,7 @@ static bool buffer_add_iaprefix(struct dhcp_buffer *buf,
 		_Static_assert(sizeof opt.prefix == sizeof iaprefix->net.prefix,
 			       "iaprefix prefex layout mismatch");
 
-		net = iaprefix->net.prefix;
+		net = &iaprefix->net.prefix;
 	} else if (iaprefix->preferences.is_set) {
 		opt = (struct dhcpv6_option_iaprefix) {
 			.pref_lftm	= CPU_TO_BE32(iaprefix->preferences.pref_lt),
@@ -253,7 +250,7 @@ static bool buffer_add_iaprefix(struct dhcp_buffer *buf,
 			       sizeof iaprefix->preferences.net.prefix,
 			       "iaprefix.prefix layout mismatch");
 
-		net = iaprefix->preferences.net.prefix;
+		net = &iaprefix->preferences.net.prefix;
 	} else {
 		opt = (struct dhcpv6_option_iaprefix) {
 			.pref_lftm	= CPU_TO_BE32(0),
@@ -273,12 +270,6 @@ static bool buffer_add_iaprefix(struct dhcp_buffer *buf,
 #undef LOG_DOMAIN
 
 #define LOG_DOMAIN	LOG_DOMAIN_IAPD
-
-static bool dhcp_iaprefix_is_used(struct dhcp_iaprefix const *iaprefix)
-{
-	/* TODO: improve this check? */
-	return iaprefix->net.len != 0;
-}
 
 static dhcp_time_t dhcp_iapd_min_valid_tm(struct dhcp_iapd const *iapd,
 					  unsigned int margin)
@@ -356,7 +347,7 @@ static bool is_reliability_timeout_complete(struct dhcp_iapd const *iapd,
 	return rel->num_tries == 1 && iapd->server.has_id;
 }
 
-static void finish_ia_pd(struct dhcp_iapd *iapd)
+static void finish_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 {
 	unsigned int	num_prefix = 0;
 
@@ -381,10 +372,13 @@ static void finish_ia_pd(struct dhcp_iapd *iapd)
 		iapd->iostate = IAPD_IOSTATE_DONE;
 	}
 
+	if (iapd->iostate == IAPD_IOSTATE_DONE)
+		dhcp_iapd_run_script(iapd, ctx, STATES[iapd->state].name);
 }
 
-dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
+dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 {
+	dhcp_time_t			now = ctx->now;
 	dhcp_time_t			timeout = TIME_INFINITY;
 	struct dhcpv6_reliability	*rel = &iapd->reliability;
 	struct dhcp_states const	*state = &STATES[iapd->state];
@@ -481,7 +475,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 	}
 
 	if (is_reliability_timeout_complete(iapd, now))
-		finish_ia_pd(iapd);
+		finish_ia_pd(iapd, ctx);
 
 	/* handling of INIT */
 
@@ -503,6 +497,8 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 		iapd->active.t1 = 0;
 		iapd->active.t2 = 0;
 		iapd->active.lease_tm = TIME_EPOCH;
+
+		dhcp_iapd_run_script(iapd, ctx, "INIT");
 
 		break;
 
@@ -535,6 +531,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 			iapd->iaprefix[i].active = iapd->iaprefix[i].pending;
 
 		iapd->active = iapd->pending;
+		dhcp_iapd_run_script(iapd, ctx, "ACTIVE");
 		break;
 	
 	case IAPD_STATE_RENEW_INIT:
@@ -556,14 +553,31 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 		break;
 
 	case IAPD_STATE_RELEASE_INIT:
+		dhcp_iapd_run_script(iapd, ctx, "PRE-RELEASE");
 		dhcpv6_reliability_init(rel, &dhcpv6_reliability_parm_release, now);
 		dhcpv6_transmission_init(&iapd->xmit, now);
+		break;
+
+	case IAPD_STATE_RELEASE:
+		if (iapd->iostate == IAPD_IOSTATE_DONE) {
+			iapd->active.t1 = 0;
+			iapd->active.t2 = 0;
+			iapd->active.lease_tm = TIME_EPOCH;
+
+			for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
+				struct dhcp_iaprefix	*prefix = &iapd->iaprefix[i].active;
+
+				prefix->net.len  = 0;
+				prefix->pref_lt  = 0;
+				prefix->valid_lt = 0;
+				prefix->lease_tm = TIME_EPOCH;
+			}
+		};
 		break;
 
 	case IAPD_STATE_ACTIVE:
 	case IAPD_STATE_SOLICIT:
 	case IAPD_STATE_REBIND:
-	case IAPD_STATE_RELEASE:
 	case IAPD_STATE_RENEW:
 	case IAPD_STATE_REQUEST:
 		break;
@@ -617,15 +631,19 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now)
 
 	case IAPD_IOSTATE_WAIT:
 		if (iapd->do_release) {
+			dhcp_iapd_run_script(iapd, ctx, "FORCE-RELEASE");
 			iapd->state   = IAPD_STATE_RELEASE_INIT;
 			iapd->iostate = IAPD_IOSTATE_NONE;
 		} else if (iapd->do_request && iapd->server.has_id) {
+			dhcp_iapd_run_script(iapd, ctx, "FORCE-REQUEST");
 			iapd->state   = IAPD_STATE_REQUEST_INIT;
 			iapd->iostate = IAPD_IOSTATE_NONE;
 		} else if (iapd->do_renew && iapd->server.has_id) {
+			dhcp_iapd_run_script(iapd, ctx, "FORCE-RENEW");
 			iapd->state   = IAPD_STATE_RENEW_INIT;
 			iapd->iostate = IAPD_IOSTATE_NONE;
 		} else if (iapd->do_request || iapd->do_renew) {
+			dhcp_iapd_run_script(iapd, ctx, "FORCE-SOLICIT");
 			iapd->state   = IAPD_STATE_SOLICIT_INIT;
 			iapd->iostate = IAPD_IOSTATE_NONE;
 		}
@@ -982,7 +1000,7 @@ int dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	    iapd->state == IAPD_STATE_RELEASE ||
 	    iapd->state == IAPD_STATE_REQUEST ||
 	    iapd->state == IAPD_STATE_RENEW)
-		finish_ia_pd(iapd);
+		finish_ia_pd(iapd, ctx);
 
 out:
 	pr_leave("%pA; rc=%d", iapd, rc);

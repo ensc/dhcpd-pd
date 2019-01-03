@@ -396,9 +396,6 @@ static void dhcp_handle_signal(struct dhcp_session *ses, int sig_fd)
 			struct dhcp_iapd	*iapd = &ses->iapd[i];
 
 			iapd->do_request = true;
-
-			iapd->iaprefix[0].active.net.prefix[0] = 3;
-			iapd->iaprefix[0].pending.net.prefix[0] = 3;
 		}
 		break;
 
@@ -762,6 +759,8 @@ int main(int argc, char *argv[])
 	sigaddset(&sig_mask, SIGUSR2);
 	sigaddset(&sig_mask, SIGINT);
 
+	setenv("DHCP_INTERFACE", iface, 1);
+
 	if (sigprocmask(SIG_BLOCK, &sig_mask, NULL) == -1) {
 		pr_err("sigprocmask(): %s", strerror(errno));
 		rc = EX_OSERR;
@@ -790,6 +789,7 @@ int main(int argc, char *argv[])
 			.data_available	= false,
 			.nl_available	= false,
 			.client_id	= &session.duid,
+			.script		= script,
 		};
 
 		struct dhcp_iapd	*next_iapd = NULL;
@@ -809,7 +809,7 @@ int main(int argc, char *argv[])
 					/* cancel quit */
 					do_quit = false;
 
-				tm = dhcp_iapd_step(iapd, ctx.now);
+				tm = dhcp_iapd_step(iapd, &ctx);
 				if (time_cmp(tm, ctx.timeout) < 0) {
 					ctx.timeout = tm;
 					next_iapd   = iapd;

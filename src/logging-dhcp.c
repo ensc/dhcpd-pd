@@ -278,7 +278,7 @@ static int print_ipv6_net(FILE *stream, struct printf_info const *info,
 	if (!*addr_arg)
 		return print_null(stream, info);
 
-	inet_ntop(AF_INET6, (*addr_arg)->prefix, buf, sizeof buf);
+	inet_ntop(AF_INET6, &(*addr_arg)->prefix, buf, sizeof buf);
 	sprintf(buf + strlen(buf), "/%d", (*addr_arg)->len);
 
 	return fprintf(stream, "%*s", get_width(info), buf);

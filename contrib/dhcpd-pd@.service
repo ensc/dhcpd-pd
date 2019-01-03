@@ -1,0 +1,13 @@
+[Unit]
+Description=DHCPv6 client for prefix delegation on %I
+After=network.target
+
+[Service]
+Type=notify
+Environment=DHCP_PD_SCRIPT=/etc/dhcpd-pd/run
+ExecStart=/usr/sbin/dhcpd-pd %i $DHCP_PD_SCRIPT
+PrivateTmp=true
+PrivateDevices=true
+
+[Install]
+WantedBy=multi-user.target

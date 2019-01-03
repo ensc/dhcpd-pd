@@ -113,7 +113,7 @@ int dhcpv6_network_assign(struct dhcpv6_network *a,
 	unsigned int	num_octets = len / 8;
 	unsigned int	num_bits = len % 8;
 	uint8_t const	*in = addr;
-	uint8_t		*out = a->prefix;
+	uint8_t		*out = a->prefix.s6_addr;
 	int		rc = 0;
 
 	if (len > 128)
@@ -164,13 +164,13 @@ int dhcpv6_network_cmp(struct dhcpv6_network const *a,
 	else if (a->len > b->len)
 		return +1;
 	else
-		return memcmp(a->prefix, b->prefix, sizeof a->prefix);
+		return memcmp(&a->prefix, &b->prefix, sizeof a->prefix);
 }
 
 void dhcpv6_network_zero(struct dhcpv6_network *a)
 {
 	a->len = 0;
-	memset(a->prefix, 0, sizeof a->prefix);
+	memset(&a->prefix, 0, sizeof a->prefix);
 }
 
 #define LOG_DOMAIN	LOG_DOMAIN_PKT

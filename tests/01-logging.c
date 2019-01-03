@@ -87,10 +87,10 @@ static void test_01(void)
 	int			rc;
 
 	rc = inet_pton(AF_INET6, "1234:5678:9abc:def0:3210:7654:ba98:fedc",
-		       net.prefix);
+		       &net.prefix);
 	assert(rc == 1);
 
-	x_sprintf(buf, "%pP", net.prefix);
+	x_sprintf(buf, "%pP", &net.prefix);
 	assert(strcmp(buf, "1234:5678:9abc:def0:3210:7654:ba98:fedc") == 0);
 
 	net.len = 4;

@@ -6,8 +6,8 @@ INSTALL =	install
 INSTALL_BIN =	${INSTALL} -p -m 0755
 MKDIR_P =	${INSTALL} -d -m 0755
 
-#DEBUG_LEVEL ?=	0
-DEBUG_LEVEL ?=	0xffff
+DEBUG_LEVEL =	0xfffc
+#DEBUG_LEVEL =	0xffff
 
 OPTFLAGS =	-O2 -g3
 CFLAGS_flto =	-flto
@@ -38,7 +38,8 @@ prefix ?=			/usr/local
 sbindir ?=			${prefix}/sbin
 
 sbin_PROGRAMS = \
-	dhcpd-pd
+	dhcpd-pd \
+	dhcpd-pd-net6-combine \
 
 noinst_PROGRAMS =
 
@@ -59,8 +60,12 @@ dhcpd-pd_SOURCES = \
 	src/logging.h \
 	src/time.c \
 	src/time.h \
+	src/script.c \
 	src/util.h \
 	src/dhcpd-pd.c \
+
+dhcpd-pd-net6-combine_SOURCES = \
+	src/net6-combine.c
 
 include ${srcdir}/tests/Modules.mk
 

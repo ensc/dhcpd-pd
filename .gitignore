@@ -1,4 +1,8 @@
+/compile_commands.json
+/auto
+/README.tex
 /.gcov
 /.lcov-html
 /dhcpd-pd
 /dhcpd-pd.lcov.info
+/dhcpd-pd-net6-combine

@@ -4,6 +4,47 @@
 It implements only the required network operations and calls scripts
 which have to do the interface configuration.
 
+This program was designed for dialup connections (e.g. PPPoE) to
+internet providers and monitors state of the interface.  It will
+e.g. rerequest an IAPD when interface went down at the daily
+reconnect.
+
+* Limitations
+
+ - supports only one interface; when there are multiple interfaces,
+   program must be started for each of them
+
+* Scripts
+
+** Environment
+
+ - =DHCP_INTERFACE= :: the interface name
+ - =DHCP_OP= :: the operation; this is the same value as the first
+                parameter of the script
+ - =DHCP_IAPD_ID= :: the numeric =IAID= (32 bits) of the IAPD
+ - =DHCP_IAPD_TM= :: the time in seconds since epoch when IAPD
+                     information were received from server. The
+                     special value of =0= means there is no such time
+                     (e.g. no lease available yet).
+ - =DHCP_IAPD_T1= :: the time in seconds since epoch when lease must
+                     be renewed from server (=RENEW= operation). The
+                     special value of =0= means there is no such time
+                     (e.g. no lease available yet) and =-1= means that
+                     =T1= lasts infinitely.
+ - =DHCP_IAPD_T1_SEC= :: the raw value in seconds of =T1=; basically
+      there holds =DHCP_IAPD_T1 = DHCP_IAPD_TM + DHCP_IAPD_T1_SEC=
+ - =DHCP_IAPD_T2= :: the time in seconds since epoch when lease must
+                     be renewed from any server (=REBIND=
+                     operation). The special value of =0= means there
+                     is no such time (e.g. no lease available yet) and
+                     =-1= means that =T2= lasts infinitely.
+ - =DHCP_IAPD_T2_SEC= :: the raw value in seconds of =T2=; basically
+      there holds =DHCP_IAPD_T2 = DHCP_IAPD_TM + DHCP_IAPD_T2_SEC=
+ - =DHCP_SERVER_ADDR= :: (optionally) the IPv6 address of the DHCP
+      server
+ - =DHCP_SERVER_PREF= :: (optionally) the numeric preference value (8
+      bits) of the DHCP server
+
 
 * Requirements:
 
@@ -13,3 +54,6 @@ which have to do the interface configuration.
 * TODOs
 
  - add in-source SHA algorithm to avoid OpenSSL dep
+ - allow more configuration
+   - custom lifetimes
+   - custom iapd identifiers

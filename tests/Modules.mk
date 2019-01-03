@@ -4,6 +4,7 @@ noinst_PROGRAMS += \
 	tests/00-utils_xmit \
 	tests/00-time \
 	tests/00-buffer \
+	tests/00-script \
 	tests/01-logging \
 	tests/99-coverage \
 
@@ -44,6 +45,13 @@ tests/00-buffer_SOURCES = \
 	tests/test-base.c \
 	src/buffer.c \
 	src/buffer.h \
+
+tests/00-script_SOURCES = \
+	tests/00-script.c \
+	tests/test-base.c \
+	ensc-lib/logging.c \
+	ensc-lib/logging.h \
+	src/logging.h \
 
 tests/01-logging_SOURCES = \
 	tests/01-logging.c \

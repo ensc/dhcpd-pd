@@ -106,7 +106,7 @@ struct dhcpv6_server_info {
 /***************/
 
 struct dhcpv6_network {
-	uint8_t				prefix[16];
+	struct in6_addr			prefix;
 	TEST_ONLY(uint8_t		_rsrvd[3]);
 	uint8_t				len;
 };
@@ -156,6 +156,7 @@ struct dhcp_context {
 	dhcp_time_t			now;
 	dhcp_time_t			timeout;
 
+	char const			*script;
 	struct dhcpv6_duid const	*client_id;
 
 	bool				sig_available;
@@ -241,11 +242,21 @@ struct dhcp_iapd {
 struct dhcpv6_message_hdr;
 
 void		dhcp_iapd_init(struct dhcp_iapd *iapd, uint32_t id);
-dhcp_time_t	dhcp_iapd_step(struct dhcp_iapd *iapd, dhcp_time_t now);
+dhcp_time_t	dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx);
 int		dhcp_iapd_run(struct dhcp_iapd *iapd, struct dhcp_context *ctx);
 int		dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 			       struct dhcpv6_message_hdr const *hdr, size_t len);
+int		dhcp_iapd_run_script(struct dhcp_iapd const *iapd,
+				     struct dhcp_context *ctx,
+				     char const *state_id);
 
 unsigned int	dhcpv6_read_status_code(void const *code_pkt, size_t len);
+
+inline static bool dhcp_iaprefix_is_used(struct dhcp_iaprefix const *iaprefix)
+{
+	/* TODO: improve this check? */
+	return iaprefix->net.len != 0;
+}
+
 
 #endif	/* H_ENSC_DHCP_PD_DHCPV6_UTIL_H */

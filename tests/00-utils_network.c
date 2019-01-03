@@ -25,8 +25,10 @@
 		struct dhcpv6_network	net = {				\
 			.len	= 250,					\
 			._rsrvd	= { 0x23, 0x42, 0x66 },			\
-			.prefix	= { 1, 2, 3, 4, 5, 6, 7, 8,		\
-				    9, 10, 11, 12, 13, 14, 15, 16 }	\
+			.prefix.s6_addr	= { 				\
+				1, 2, 3, 4, 5, 6, 7, 8,			\
+				9, 10, 11, 12, 13, 14, 15, 16		\
+			}						\
 		};							\
 		struct in6_addr		inp;				\
 		struct in6_addr		exp;				\
@@ -45,7 +47,7 @@
 									\
 		assert(net.len == (_len));				\
 		assert(memcmp(net._rsrvd, "\x23\x42\x66", 3) == 0);	\
-		assert(memcmp(net.prefix, &exp, 16) == 0);		\
+		assert(memcmp(&net.prefix, &exp, 16) == 0);		\
 									\
 		assert(dhcpv6_network_cmp(&net, &net) == 0);		\
 	} while (0)
@@ -80,7 +82,7 @@ static void test_01(void)
 	dhcpv6_network_zero(&net);
 
 	assert(net.len == 0);
-	assert(memcmp(net.prefix, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16) == 0);
+	assert(memcmp(&net.prefix, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16) == 0);
 }
 
 static void test_02(void)
