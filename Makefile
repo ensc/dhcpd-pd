@@ -6,7 +6,7 @@ INSTALL =	install
 INSTALL_BIN =	${INSTALL} -p -m 0755
 MKDIR_P =	${INSTALL} -d -m 0755
 
-DEBUG_LEVEL =	0xfffc
+DEBUG_LEVEL =	0x7c
 #DEBUG_LEVEL =	0xffff
 
 OPTFLAGS =	-O2 -g3
