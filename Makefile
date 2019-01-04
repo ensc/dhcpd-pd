@@ -81,8 +81,8 @@ clean:
 install:	.install-sbin
 
 .install-sbin:	${sbin_PROGRAMS}
-	${MKDIR_P} ${DESTDIR}${sbindir}/dhcpd-pd
-	${INSTALL_BIN} -D $^ ${DESTDIR}${sbindir}/
+	${MKDIR_P} ${DESTDIR}${sbindir}
+	${INSTALL_BIN} $^ ${DESTDIR}${sbindir}/
 
 ${sbin_PROGRAMS} ${noinst_PROGRAMS}:
 	rm -f *.gcno
