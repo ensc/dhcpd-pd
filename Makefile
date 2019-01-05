@@ -13,8 +13,8 @@ OPTFLAGS =	-O2 -g3
 CFLAGS_flto =	-flto
 LDFLAGS_flto =	-fuse-linker-plugin
 AM_CFLAGS =	-std=gnu11 -Wall -W -Wno-unused-parameter -Wmissing-prototypes
-AM_CPPFLAGS =	-I${srcdir} -D_GNU_SOURCE
-CFLAGS =	${OPTFLAGS} -Werror -D_FORTIFY_SOURCE=2 -fstack-protector -DDEBUG_LEVEL=${DEBUG_LEVEL} ${CFLAGS_flto}
+AM_CPPFLAGS =	-I${srcdir} -D_GNU_SOURCE -DDEBUG_LEVEL=${DEBUG_LEVEL}
+CFLAGS =	${OPTFLAGS} -Werror -D_FORTIFY_SOURCE=2 -fstack-protector ${CFLAGS_flto}
 LDFLAGS =	${LDFLAGS_flto} -Wl,-as-needed
 LDLIBS  =	-lcrypto
 PROFILE_FLAGS =	--coverage -fprofile-dir=${builddir}/.gcov/${@F} -fprofile-abs-path -fno-inline
