@@ -44,7 +44,43 @@ reconnect.
       server
  - =DHCP_SERVER_PREF= :: (optionally) the numeric preference value (8
       bits) of the DHCP server
+ - =DHCP_IAPREFIX_NUM= :: number of prefixes
+ - =DHCP_IAPREFIX_0_TM= :: the time in seconds since epoch when prefix
+      has been
+ - =DHCP_IAPREFIX_x_LT_PREF= :: the pref lifetime of the prefix in
+      seconds since epoch; =x= is the index of the prefix
+ - =DHCP_IAPREFIX_x_LT_PREF_SEC= :: the raw pref lifetime of the
+      prefix in seconds; =x= is the index of the prefix
+ - =DHCP_IAPREFIX_x_LT_VALID= :: the valid lifetime of the validix in
+      seconds since epoch; =x= is the index of the validix
+ - =DHCP_IAPREFIX_x_LT_VALID_SEC= :: the raw valid lifetime of the
+      validix in seconds; =x= is the index of the validix
+ - =DHCP_IAPREFIX_x_NET_ADDR= :: the IPv6 address of the prefix
+ - =DHCP_IAPREFIX_0_NET_LEN= :: the len of the prefix
 
+*** Example
+
+```
+DHCP_IAPD_ID=1
+DHCP_IAPD_T1=1546689795
+DHCP_IAPD_T1_SEC=900
+DHCP_IAPD_T2=1546690335
+DHCP_IAPD_T2_SEC=1440
+DHCP_IAPD_TM=1546688895
+DHCP_IAPREFIX_0_LT_PREF=1546690695
+DHCP_IAPREFIX_0_LT_PREF_SEC=1800
+DHCP_IAPREFIX_0_LT_VALID=1546703295
+DHCP_IAPREFIX_0_LT_VALID_SEC=14400
+DHCP_IAPREFIX_0_NET_ADDR=2003:cf:7746:5200::
+DHCP_IAPREFIX_0_NET_LEN=56
+DHCP_IAPREFIX_0_TM=1546688895
+DHCP_IAPREFIX_NUM=1
+DHCP_INTERFACE=ppp0
+DHCP_NOW=1546688895
+DHCP_OP=ACTIVE
+DHCP_SERVER_ADDR=fe80::106:106:3e9b:f7b6
+DHCP_SERVER_PREF=0
+```
 
 * Requirements:
 
