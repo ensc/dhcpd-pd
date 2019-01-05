@@ -2,10 +2,10 @@ language: c
 
 env:
   global:
-   - secure: "ZWq6iWsUWeQi3rLfp7MP/Db23SIxlF+Rc4tKXtpTExketk2WKzp5uj/voWox0Wb99913vQi1MnxYz+P/vpic8GRJIjsyRdVm82lasCKmyNsLdn4HaydUymodh97YTbl4yqoBt8DjSxm77qvFBdwsxNYs1BVqX8SUsnLXegThOR/cK35ZxJAyJq+DgFwwFtVRcDX1inq5I9VeCFNlTD5I2DSpk1+G03qwn0nOnijIjmixieBfrPlQOHVs+zXlAIM8P7O/8b12/F+cDhJP2L+/w9NOVcrLeUMBT5ntzLV6vH/enqypavAfdVOCGp7DX7e8/H04eRm4mUkHlwwLxtC9l5KshBXIakSv4NVjUU+S+v5O4QBpX1uvVqoS9T4asuOXHk66/xZ9a+GB7+94PCDMqribco743qHJaeC62YvhG2b1S8iOhJclvhK2U8YeIfY3sOUKklqpmdiR0RKXiMWUw6CpL/OtDc9oY2W8k3CfBU6cpZbn8emH5jybxpyNr3t7MGvfSDQQwdsQRIXs1QPeLZ7BsomapEi+NoNV9ADBvRgvPTFi+cwn0aIo2BNTK3mhK0PeWT1bp4oxCB9ZZr51rQo9FybZJFqMP5IQsKBV93FH4J2QKmJ27oY1vE3o6wLYnpg7Cfm83dZrpIex/wAvRxiaQ5VW9gRXyS+S6oY8SeY="
+   - secure: "XpQ08Wp4HrVmkU59z978hrIa1OAbECLmt+B9/MMkY87AXJD2DqCNlQYTBuysuEBKr5P74kMlTph8tGPZ7O4g7vmF+jF7WLibk4sxk+p3BIpIxNGphXwVC9pkcem30bZPa1cx9S1Be4tHjtW9eZPfME8fSXJD0wWpyfb2lUwOP/Mwbtt+Rv9+H0rL7cmAQi6H19hRI+XWp6IcDDQkDSMQQpUUlZHhAY4XrhWC2Dt9n+e/wkOjGZ6iS452WIMEoJbXFnjfbSQsnwA5KNR8EFkhBmj7wwvd/l8bsW8atkuv7L9qJzEsWvRCZFEjPRrSAiqPXq8Fh+H1HVHiixV7ewTTir2i4dgQAStnHgiYJo/lDwrUttLcE1W9peJm/TUpiRtLs0xa6mRFGlSXm3Ezu4yJLTYP6kKvHavn4hJtMQQ8KgL6e9z4OU2bzBwZRbnoGf0+6tu58meSGKIe8xyjFoyE+Wk4V2nhnzzHpyzhKdxaZGBtwKimCJ+VEYeIK7A+hPnLU4+eA/31JObRiinYDVBNnHfhVR1hmGPys1cbL2DBlYBQGmmwJtdGMg3rlkYN7KDABaUM5fTDRwftJidz+ZbC3jR5WMYQHRF+wE8sWVeRd3tMsBQzO6Ay5qEdkqgCzo6sPGYrY3wlk+Mer2IAjyTvG4X5dbWpU0QGdI5/QlZWy/U="
 
 before_install:
-  - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+  - echo -n | openssl s_client -connect https://scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
 
 addons:
   coverity_scan:
