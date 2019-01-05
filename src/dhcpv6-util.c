@@ -47,8 +47,7 @@ void dhcpv6_reliability_init(struct dhcpv6_reliability *rel,
 }
 
 bool
-dhcpv6_reliability_check(struct dhcpv6_reliability const *rel,
-			 dhcp_time_t now)
+dhcpv6_reliability_check(struct dhcpv6_reliability const *rel, dhcp_time_t now)
 {
 	struct dhcpv6_reliability_parm const *parm = rel->parm;
 
