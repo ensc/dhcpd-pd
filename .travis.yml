@@ -18,5 +18,5 @@ addons:
 
 dist: xenial
 script:
-- make -j all
-- make run-lcov || ":"
+- make HAVE_NO_GETRANDOM=1 -j all
+- make HAVE_NO_GETRANDOM=1 run-lcov || ":"
