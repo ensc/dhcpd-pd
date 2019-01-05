@@ -205,8 +205,12 @@ static int _print_time(FILE *stream, struct printf_info const *info,
 			need_part = true;
 		}
 
+		(void)need_part;
+
 		ptr += sprintf(ptr, "%02lu.", (unsigned long)(tm / 1000));
 		ptr += sprintf(ptr, "%03u",   (unsigned int)(tm % 1000));
+
+		(void)ptr;
 
 		str = buf;
 	}
@@ -314,6 +318,8 @@ static int print_iaprefix(FILE *stream, struct printf_info const *info,
 	ptr += sprintf(ptr, "%N tm:%T (pref:%u, valid:%u)",
 		       &iaprefix->net, &iaprefix->lease_tm,
 		       iaprefix->pref_lt, iaprefix->valid_lt);
+
+	(void)ptr;
 
 	return fprintf(stream, "%*s", get_width(info), buf);
 }
@@ -427,6 +433,8 @@ static int print_iapd(FILE *stream, struct printf_info const *info,
 		       iapd->pending.t1, iapd->active.t1,
 		       iapd->pending.t2, iapd->active.t2,
 		       &iapd->server.addr);
+
+	(void)ptr;
 
 	return fprintf(stream, "%*s", get_width(info), buf);
 }
