@@ -18,5 +18,5 @@ addons:
 
 dist: xenial
 script:
-- make -j world
+- make -j all
 - make run-lcov || ":"
