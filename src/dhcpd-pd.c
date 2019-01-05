@@ -432,6 +432,7 @@ static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *c
 	struct dhcpv6_option_hdr const	*opt_clnt_id = NULL;
 	int				rc;
 
+	rc = 0;
 	dhcpv6_foreach_option(opt, hdr, &tmp_len) {
 		size_t		opt_len = dhcpv6_get_option_len(opt);
 		void const	*opt_data = dhcpv6_get_option_data(opt);
