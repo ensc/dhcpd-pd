@@ -5,4 +5,4 @@ build:
     - dnf install -y lcov gcc openssl-devel make
     - make -j world
     - make run-lcov || ":"
-    - lcov --list coverage.info || ":"
+    - lcov --list dhcpd-pd.lcov.info || ":"
