@@ -16,6 +16,7 @@ addons:
     build_command_prepend: "true"
     branch_pattern: coverity
 
+dist: xenial
 script:
 - make -j world
 - make run-lcov || ":"
