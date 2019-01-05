@@ -2,8 +2,10 @@ language: c
 
 env:
   global:
-    before_install:
-      - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+   - secure: "ZWq6iWsUWeQi3rLfp7MP/Db23SIxlF+Rc4tKXtpTExketk2WKzp5uj/voWox0Wb99913vQi1MnxYz+P/vpic8GRJIjsyRdVm82lasCKmyNsLdn4HaydUymodh97YTbl4yqoBt8DjSxm77qvFBdwsxNYs1BVqX8SUsnLXegThOR/cK35ZxJAyJq+DgFwwFtVRcDX1inq5I9VeCFNlTD5I2DSpk1+G03qwn0nOnijIjmixieBfrPlQOHVs+zXlAIM8P7O/8b12/F+cDhJP2L+/w9NOVcrLeUMBT5ntzLV6vH/enqypavAfdVOCGp7DX7e8/H04eRm4mUkHlwwLxtC9l5KshBXIakSv4NVjUU+S+v5O4QBpX1uvVqoS9T4asuOXHk66/xZ9a+GB7+94PCDMqribco743qHJaeC62YvhG2b1S8iOhJclvhK2U8YeIfY3sOUKklqpmdiR0RKXiMWUw6CpL/OtDc9oY2W8k3CfBU6cpZbn8emH5jybxpyNr3t7MGvfSDQQwdsQRIXs1QPeLZ7BsomapEi+NoNV9ADBvRgvPTFi+cwn0aIo2BNTK3mhK0PeWT1bp4oxCB9ZZr51rQo9FybZJFqMP5IQsKBV93FH4J2QKmJ27oY1vE3o6wLYnpg7Cfm83dZrpIex/wAvRxiaQ5VW9gRXyS+S6oY8SeY="
+
+before_install:
+  - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
 
 addons:
   coverity_scan:
