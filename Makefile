@@ -19,6 +19,10 @@ LDFLAGS =	${LDFLAGS_flto} -Wl,-as-needed
 LDLIBS  =	-lcrypto
 PROFILE_FLAGS =	--coverage -fprofile-dir=${builddir}/.gcov/${@F} -fprofile-abs-path -fno-inline
 
+ifdef HAVE_NO_GETRANDOM
+AM_CPPFLAGS +=	-DHAVE_NO_GETRANDOM
+endif
+
 GENHTML =		genhtml
 GENHTML_OUTDIR =	.lcov-html
 LCOV =			lcov

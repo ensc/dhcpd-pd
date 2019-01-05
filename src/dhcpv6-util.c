@@ -17,8 +17,12 @@
 #include "dhcpv6-util.h"
 
 #include <stdlib.h>
+#include <fcntl.h>
 #include <unistd.h>
-#include <sys/random.h>
+
+#ifndef HAVE_NO_GETRANDOM
+#  include <sys/random.h>
+#endif
 
 #include "logging.h"
 
@@ -83,6 +87,31 @@ dhcpv6_reliability_next(struct dhcpv6_reliability *rel, dhcp_time_t now)
 }
 
 #undef LOG_DOMAIN
+
+static ssize_t __attribute__((__used__))
+getrandom_compat(void *buf, size_t len, unsigned int flags)
+{
+	int		fd;
+	ssize_t		res;
+
+	assert(flags == 0);
+
+	fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+	if (fd < 0)
+		return -1;
+
+	res = read(fd, buf, len);
+	close(fd);
+
+	return res;
+}
+
+#ifdef HAVE_NO_GETRANDOM
+static ssize_t getrandom(void *buf, size_t buflen, unsigned int flags)
+{
+	return getrandom_compat(buf, buflen, flags);
+}
+#endif
 
 static int x_getrandom(void *buf, size_t len)
 {
