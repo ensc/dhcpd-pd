@@ -1,4 +1,6 @@
+image: fedora:29
 build:
   script:
+    - dnf install -y lcov gcc openssl-devel
     - make -j world
     - make run-lcov || ":"
