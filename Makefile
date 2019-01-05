@@ -9,6 +9,8 @@ MKDIR_P =	${INSTALL} -d -m 0755
 DEBUG_LEVEL =	0x7c
 #DEBUG_LEVEL =	0xffff
 
+ANALYZE =	clang --analyze
+
 OPTFLAGS =	-O2 -g3
 CFLAGS_flto =	-flto
 LDFLAGS_flto =	-fuse-linker-plugin
@@ -36,7 +38,15 @@ compile_link = ${CC} -o $@ \
 	$1 \
 	${LDLIBS}
 
-register_program = $1: $${$1_SOURCES}
+analyze = ${ANALYZE} \
+	${AM_CPPFLAGS} ${CPPFLAGS} \
+	${AM_CFLAGS} ${CFLAGS} \
+	$1 \
+
+define register_program
+$1: $${$1_SOURCES}
+.analyze-$1: $${$1_SOURCES}
+endef
 
 prefix ?=			/usr/local
 sbindir ?=			${prefix}/sbin
@@ -77,6 +87,8 @@ all:	${sbin_PROGRAMS}
 
 world:	all ${noinst_PROGRAMS}
 
+analyze:	$(addprefix .analyze-,${sbin_PROGRAMS})
+
 clean:
 	rm -f ${sbin_PROGRAMS} ${noinst_PROGRAMS}
 	rm -f *.gcno *.gcda ${LCOV_INFO}
@@ -111,6 +123,10 @@ run-lcov:
 
 run-tests:	${noinst_PROGRAMS}
 	${MAKE} $(addprefix .run-test-,$^)
+
+
+$(addprefix .analyze-,${sbin_PROGRAMS}):.analyze-%:
+	$(call analyze,$(filter %.c,$^))
 
 $(addprefix .run-test-,${noinst_PROGRAMS}):.run-test-%:	%
 	$<
