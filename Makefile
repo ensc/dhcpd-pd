@@ -84,6 +84,11 @@ install:	.install-sbin
 	${MKDIR_P} ${DESTDIR}${sbindir}
 	${INSTALL_BIN} $^ ${DESTDIR}${sbindir}/
 
+## HACK: this is ugly but gcc puts .gcno files always into the top
+## level directory but we need these files per-target.  We move them
+## manually but this requires that only one gcc instance is running
+.NOTPARALLEL:
+
 ${sbin_PROGRAMS} ${noinst_PROGRAMS}:
 	rm -f *.gcno
 	$(call compile_link,$(filter %.c,$^))
