@@ -211,7 +211,7 @@ unsigned int dhcpv6_read_status_code(void const *code_pkt, size_t len)
 	len -= 2;
 
 	if (res == 0)
-		pr_info("STATUS: %.*s", (int)len, msg);
+		pr_debug("STATUS: %.*s", (int)len, msg);
 	else
 		pr_warn("STATUS %u: %.*s", res, (int)len, msg);
 

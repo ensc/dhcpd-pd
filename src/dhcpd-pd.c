@@ -294,7 +294,7 @@ static int dhcp_session_reopen(struct dhcp_session *ses)
 	};
 	int			rc;
 
-	pr_info("reopening session");
+	pr_debug("reopening session");
 
 	if (ses->fd >= 0) {
 		close(ses->fd);

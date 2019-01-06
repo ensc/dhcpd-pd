@@ -305,7 +305,7 @@ int dhcp_iapd_run_script(struct dhcp_iapd const *iapd,
 		} else if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
 			pr_err("script failed with %04x", status);
 		} else {
-			pr_info("script finished");
+			pr_debug("script finished");
 			rc = 0;
 		}
 	}

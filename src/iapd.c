@@ -368,7 +368,7 @@ static void finish_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 		pr_warn("IAPD: finished without valid prefix (%pA)", iapd);
 		iapd->iostate = IAPD_IOSTATE_ERROR;
 	} else {
-		pr_info(">>>>>>>>>> IAPD finished: %pA", iapd);
+		pr_debug(">>>>>>>>>> IAPD finished: %pA", iapd);
 		iapd->iostate = IAPD_IOSTATE_DONE;
 	}
 
@@ -401,8 +401,8 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 						 iapd->active.t2, 100);
 
 		if (time_cmp(tm, now) < 0) {
-			pr_warn("%s T2 reached; going to %s", state->name,
-				STATES[state->t2_to].name);
+			pr_debug("%s T2 reached; going to %s", state->name,
+				 STATES[state->t2_to].name);
 			iapd->state = state->t2_to;
 			iapd->iostate = IAPD_IOSTATE_TIMEOUT;
 			goto out;
@@ -417,8 +417,8 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 
 		to = dhcp_iapd_min_valid_tm(iapd, state->tm_margin);	
 		if (time_cmp(to, now) < 0) {
-			pr_warn("%s valid tm %pT reached; going to %s",
-				state->name, &to, STATES[state->valid_to].name);
+			pr_debug("%s valid tm %pT reached; going to %s",
+				 state->name, &to, STATES[state->valid_to].name);
 			iapd->state = state->valid_to;
 			iapd->iostate = IAPD_IOSTATE_TIMEOUT;
 			goto out;
@@ -433,8 +433,8 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 						 iapd->active.t1, 100);
 
 		if (time_cmp(tm, now) < 0) {
-			pr_warn("%s T1 reached; going to %s", state->name,
-				STATES[state->t1_to].name);
+			pr_debug("%s T1 reached; going to %s", state->name,
+				 STATES[state->t1_to].name);
 			iapd->state = state->t1_to;
 			iapd->iostate = IAPD_IOSTATE_TIMEOUT;
 			goto out;
