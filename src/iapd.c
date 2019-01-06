@@ -573,11 +573,26 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 		};
 		break;
 
+	case IAPD_STATE_REQUEST:
+		if (iapd->iostate == IAPD_IOSTATE_DONE) {
+			if (!time_is_epoch(iapd->active.lease_tm))
+				dhcp_iapd_run_script(iapd, ctx, "OLDINFO");
+
+			for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
+				struct dhcp_iaprefix	*prefix = &iapd->iaprefix[i].active;
+
+				if (!dhcp_iaprefix_is_used(prefix))
+					continue;
+
+				pr_info("got net %pN", &prefix->net);
+			}
+		}
+		break;
+
 	case IAPD_STATE_ACTIVE:
 	case IAPD_STATE_SOLICIT:
 	case IAPD_STATE_REBIND:
 	case IAPD_STATE_RENEW:
-	case IAPD_STATE_REQUEST:
 		break;
 	}
 
