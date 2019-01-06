@@ -683,13 +683,15 @@ static int handle_ia_prefix(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 			    struct dhcpv6_option_iaprefix const *opt_prefix,
 			    size_t len)
 {
+	struct dhcpv6_option_hdr const		*opt_first;
 	struct dhcp_iaprefix	*prefix = NULL;
 	uint32_t		valid_lt = be32_to_cpu(opt_prefix->valid_lftm);
 	uint32_t		pref_lt = be32_to_cpu(opt_prefix->pref_lftm);
 
 	dhcp_time_t		valid_tm = time_add_lt(ctx->now, valid_lt, 100);
 	dhcp_time_t		pref_tm = time_add_lt(ctx->now, pref_lt, 100);
-	
+	unsigned int		status_code = 0;
+
 	struct dhcpv6_network	net;
 	int			rc;
 
@@ -701,6 +703,56 @@ static int handle_ia_prefix(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 
 	if (valid_lt == 0 && iapd->state != IAPD_STATE_REQUEST) {
 		pr_warn("IAPREFIX valid-lt is zero");
+		return -1;
+	}
+
+	len -= sizeof *opt_prefix;
+	opt_first = dhcpv6_validated_option((void *)&opt_prefix[1], len);
+
+	if (len > 0 && !opt_first) {
+		pr_err("IAPRERFIX: bad layout");
+		return -1;
+	}
+
+	rc = 0;
+	dhcpv6_foreach_option_next(opt, opt_first, &len) {
+		unsigned int		emb_code  = be16_to_cpu(opt->option);
+		unsigned int		emb_len   = dhcpv6_get_option_len(opt);
+		void const		*emb_data = dhcpv6_get_option_data(opt);
+
+		pr_debug("IAPREFIX EMBOPTION: %s(+%u)",
+			 dhcpv6_option_to_str(emb_code), emb_len);
+
+		switch (be16_to_cpu(opt->option)) {
+		case DHCPV6_OPTION_STATUS_CODE:
+			if (emb_len < 2) {
+				pr_err("bad STATUS CODE");
+				rc = -1;
+			} else {
+				status_code = dhcpv6_read_status_code(emb_data, emb_len);
+			}
+
+			break;
+
+		default:
+			pr_warn("unsupported EMBOPTION %s(%d)+%u",
+				dhcpv6_option_to_str(emb_code), emb_code,
+				emb_len);
+			break;
+		}
+
+		if (rc < 0)
+			break;
+	}
+
+	if (rc < 0)
+		return -1;
+
+	switch (status_code) {
+	case DHCPV6_STATUS_CODE_SUCCESS:
+		break;
+
+	default:
 		return -1;
 	}
 
