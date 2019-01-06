@@ -674,6 +674,24 @@ out:
 	abort();
 }
 
+static void handle_iaprefix_noprefixavail(struct dhcp_iapd *iapd)
+{
+	if (iapd->state != IAPD_STATE_REQUEST)
+		return;
+
+	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
+		struct dhcp_iaprefix	*tmp = &iapd->iaprefix[i].pending;
+
+		tmp->net.len  = 0;
+		tmp->lease_tm = TIME_EPOCH;
+		tmp->pref_lt  = 0;
+		tmp->valid_lt = 0;
+		memset(&tmp->net.prefix, 0, sizeof tmp->net.prefix);
+	}
+
+	iapd->iostate = IAPD_IOSTATE_ERROR;
+}
+
 /**
  *
  *  Return:
@@ -751,6 +769,10 @@ static int handle_ia_prefix(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	switch (status_code) {
 	case DHCPV6_STATUS_CODE_SUCCESS:
 		break;
+
+	case DHCPV6_STATUS_CODE_NOPREFIXAVAIL:
+		handle_iaprefix_noprefixavail(iapd);
+		return -1;
 
 	default:
 		return -1;
@@ -905,6 +927,11 @@ static int handle_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 
 	switch (status_code) {
 	case DHCPV6_STATUS_CODE_SUCCESS:
+		break;
+
+	case DHCPV6_STATUS_CODE_NOPREFIXAVAIL:
+		handle_iaprefix_noprefixavail(iapd);
+		rc = -1;
 		break;
 
 	default:
