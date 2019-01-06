@@ -398,8 +398,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 	/* check #1: test T2 */
 	if (state->t2_to != IAPD_STATE_NONE) {
 		dhcp_time_t	tm = time_add_lt(iapd->active.lease_tm,
-						 iapd->active.t2,
-						 state->tm_margin);
+						 iapd->active.t2, 100);
 
 		if (time_cmp(tm, now) < 0) {
 			pr_warn("%s T2 reached; going to %s", state->name,
@@ -431,8 +430,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 	/* check #3: test T1 */
 	if (state->t1_to != IAPD_STATE_NONE) {
 		dhcp_time_t	tm = time_add_lt(iapd->active.lease_tm,
-						 iapd->active.t1,
-						 state->tm_margin);
+						 iapd->active.t1, 100);
 
 		if (time_cmp(tm, now) < 0) {
 			pr_warn("%s T1 reached; going to %s", state->name,
