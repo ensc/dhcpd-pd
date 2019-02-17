@@ -1,9 +1,104 @@
 image: fedora:29
+stages:
+  - prepare
+  - build
+
+prepare:coverity:
+  stage: prepare
+  only:
+    - /^coverity-scan$/
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - covcache.tar.gz
+  variables:
+    GIT_STRATEGY: none
+    GIT_SUBMODULE_STRATEGY: none
+  script:
+    - d=/cache
+    - test -d "$d" || d=/tmp
+    - echo "Using '$d' as cache location"
+    - covtar=$d/coverity.tar.gz
+    - cachetar=$d/covcache.tar.gz
+    - |
+      _curl() {
+        curl --silent --show-error --fail \
+          -F "token=$COVERITY_TOKEN" -F "project=$COVERITY_PROJECT" https://scan.coverity.com/download/linux64 "$@"
+      }
+
+    - |
+      if test -e "$covtar"; then
+        echo "Checking cached coverity scan tool"
+        rm -f /tmp/coverity.md5 /tmp/coverity.md5.tmp
+        _curl -F "md5=1" --output /tmp/coverity.md5.tmp
+        printf '%s\t-' "`sed '1p;d' /tmp/coverity.md5.tmp`" > /tmp/coverity.md5
+        md5sum -c /tmp/coverity.md5 < "$covtar" || rm -f "$covtar"
+      fi
+
+    - |
+      if ! test -e "$covtar"; then
+        echo "Downloading coverity scan tool"
+        rm -f "$cachetar"
+        _curl --output "$covtar"
+      fi
+
+    - |
+      if ! test -e "$cachetar"; then
+        echo "Repacking coverity scan tool"
+        mkdir /tmp/opt
+        tar xzf "$covtar" -C /tmp/opt
+        tar czf /tmp/covcache.tar -C /tmp/opt/cov-analysis-* . --owner root --group root --mode a+rX,go-w
+        mv /tmp/covcache.tar "$cachetar"
+      fi
+
+    - cp --reflink=auto "$cachetar" covcache.tar.gz
+
 build:
+  stage: build
   coverage: '/^\s*Total:\|(\d+\.\d+\%)\s+.*$/'
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - .lcov-html
   script:
     - dnf install -y lcov gcc openssl-devel make clang
     - make -j world
     - make -j analyze
     - make run-lcov || ":"
     - lcov --list dhcpd-pd.lcov.info || ":"
+
+coverity:
+  stage: build
+  only:
+    - /^coverity-scan$/
+  dependencies:
+    - prepare:coverity
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - cov-int/
+  script:
+    - dnf install -y gcc openssl-devel make git-core
+
+    - mkdir /tmp/opt
+    - tar xzf covcache.tar.gz -C /tmp/opt
+    - PATH=/tmp/opt/bin:$PATH
+
+    - RESULTS_DIR=`pwd`/cov-int
+    - RESULTS_ARCHIVE=analysis-results.tgz
+
+    - cov-build --dir "$RESULTS_DIR" make world
+    - cov-import-scm --dir "$RESULTS_DIR" --scm git --log "$RESULTS_DIR"/scm_log.txt
+
+    - tar czf "$RESULTS_ARCHIVE" "$RESULTS_DIR" --owner root --group root --mode a+rX,go-w
+
+    - |
+      curl \
+        --fail --silent --show-error \
+        --form "token=$COVERITY_TOKEN" \
+        --form "project=$COVERITY_PROJECT" \
+        --form "file=@$RESULTS_ARCHIVE" \
+        --form "version=$CI_COMMIT_SHA" \
+        --form "description=Travis CI build" \
+        --form "email=GITLAB_USER_EMAIL" \
+        https://scan.coverity.com/builds
