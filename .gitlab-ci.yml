@@ -2,6 +2,7 @@ image: fedora:29
 stages:
   - prepare
   - build
+  - deploy
 
 prepare:coverity:
   stage: prepare
@@ -102,3 +103,18 @@ coverity:
         --form "description=Travis CI build" \
         --form "email=GITLAB_USER_EMAIL" \
         https://scan.coverity.com/builds
+
+pages:
+  stage: deploy
+  variables:
+    GIT_STRATEGY: none
+    GIT_SUBMODULE_STRATEGY: none
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - public
+  dependencies:
+    - build
+  script:
+    - mkdir -p public
+    - mv .lcov-html public/lcov
