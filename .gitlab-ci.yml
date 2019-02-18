@@ -110,6 +110,7 @@ coverity:
     - |
       curl \
         --fail --silent --show-error \
+        --write-out '\n%{http_code}: %{size_upload} bytes uploaded; %{size_download} donwloaded in %{time_connect} seconds\n' \
         --form "token=$COVERITY_TOKEN" \
         --form "project=$COVERITY_PROJECT" \
         --form "file=@$RESULTS_ARCHIVE" \
