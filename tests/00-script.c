@@ -26,6 +26,7 @@ static void test_00(void)
 
 	dhcp_iapd_exec_fill_globals();
 	dhcp_iapd_fill_env(&env, &iapd, &ctx, "TEST");
+	dhcp_iapd_free_env(&env);
 }
 
 #undef main
