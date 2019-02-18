@@ -65,7 +65,7 @@ build:
     - dnf install -y lcov gcc openssl-devel make clang
     - make -j world
     - make -j analyze
-    - make run-lcov || ":"
+    - make run-gcov || ":"
     - lcov --list dhcpd-pd.lcov.info || ":"
 
 coverity:
