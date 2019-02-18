@@ -88,7 +88,7 @@ coverity:
     - RESULTS_DIR=`pwd`/cov-int
     - RESULTS_ARCHIVE=analysis-results.tgz
 
-    - cov-build --dir "$RESULTS_DIR" make world
+    - cov-build --dir "$RESULTS_DIR" make IN_COVSCAN=1 world
     - cov-import-scm --dir "$RESULTS_DIR" --scm git --log "$RESULTS_DIR"/scm_log.txt
 
     - tar czf "$RESULTS_ARCHIVE" "$RESULTS_DIR" --owner root --group root --mode a+rX,go-w
