@@ -115,7 +115,7 @@ coverity:
         --form "file=@$RESULTS_ARCHIVE" \
         --form "version=$CI_COMMIT_SHA" \
         --form "description=Travis CI build" \
-        --form "email=GITLAB_USER_EMAIL" \
+        --form "email=$GITLAB_USER_EMAIL" \
         https://scan.coverity.com/builds
 
 pages:
