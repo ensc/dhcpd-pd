@@ -72,6 +72,7 @@ tests/99-coverage_SOURCES = \
 define declare_test
 noinst_PROGRAMS += $1
 
+$1:	| $(dir $1)/.dirstamp
 $1:     override CFLAGS:=${TEST_CFLAGS}
 $1:	override OPTFLAGS=
 $1:	override CFLAGS_flto=

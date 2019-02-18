@@ -28,6 +28,7 @@ analyze = ${ANALYZE} \
 
 ## register_program <prog>
 define _register_program
+$1: | $(dir $1)/.dirstamp
 $1: $${$1_SOURCES} $${$1_BUILTSOURCES}
 	$$(call gcov_prepare)
 	$$(call compile_link)

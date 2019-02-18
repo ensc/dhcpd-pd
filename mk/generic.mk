@@ -25,6 +25,9 @@ ORIG_MAKE = ${MAKE} -f $(abspath $(firstword $(MAKEFILE_LIST)))
 	${MKDIR_P} ${@D}
 	@touch $@
 
+.dirstamp:
+	@touch $@
+
 FORCE:
 .PHONY: FORCE
 
