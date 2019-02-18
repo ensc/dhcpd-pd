@@ -1,3 +1,4 @@
+*.plist
 /compile_commands.json
 /auto
 /README.tex

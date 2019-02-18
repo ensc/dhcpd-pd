@@ -1,15 +1,13 @@
-builddir ?= .
-srcdir ?= $(dir $(firstword ${MAKEFILE_LIST}))
-VPATH = ${srcdir}
+PACKAGE = dhcpd-pd
+VERSION = 0.0.1
 
-INSTALL =	install
-INSTALL_BIN =	${INSTALL} -p -m 0755
-MKDIR_P =	${INSTALL} -d -m 0755
+srcdir ?= $(dir $(firstword ${MAKEFILE_LIST}))
+builddir ?= .
+
+VPATH = ${srcdir}
 
 DEBUG_LEVEL =	0x7c
 #DEBUG_LEVEL =	0xffff
-
-ANALYZE =	clang --analyze
 
 OPTFLAGS =	-O2 -g3
 CFLAGS_flto =	-flto
@@ -19,37 +17,26 @@ AM_CPPFLAGS =	-I${srcdir} -D_GNU_SOURCE -DDEBUG_LEVEL=${DEBUG_LEVEL}
 CFLAGS =	${OPTFLAGS} -Werror -D_FORTIFY_SOURCE=2 -fstack-protector ${CFLAGS_flto}
 LDFLAGS =	${LDFLAGS_flto} -Wl,-as-needed
 LDLIBS  =	-lcrypto
-PROFILE_FLAGS =	--coverage -fprofile-dir=${builddir}/.gcov/${@F} -fprofile-abs-path -fno-inline
 
 ifdef HAVE_NO_GETRANDOM
 AM_CPPFLAGS +=	-DHAVE_NO_GETRANDOM
 endif
 
-GENHTML =		genhtml
-GENHTML_OUTDIR =	.lcov-html
-LCOV =			lcov
-LCOV_FLAGS =		-b ${srcdir} --no-external
-LCOV_INFO =		dhcpd-pd.lcov.info
+SUBDIRS = tests
 
-compile_link = ${CC} -o $@ \
-	${AM_CPPFLAGS} ${CPPFLAGS} \
-	${AM_CFLAGS} ${CFLAGS} \
-	${AM_LDFLAGS} ${LDFLAGS} \
-	$1 \
-	${LDLIBS}
+### set the default target
 
-analyze = ${ANALYZE} \
-	${AM_CPPFLAGS} ${CPPFLAGS} \
-	${AM_CFLAGS} ${CFLAGS} \
-	$1 \
+all:
 
-define register_program
-$1: $${$1_SOURCES}
-.analyze-$1: $${$1_SOURCES}
-endef
+### include make rules
 
-prefix ?=			/usr/local
-sbindir ?=			${prefix}/sbin
+include ${srcdir}/mk/generic.mk
+include ${srcdir}/mk/gcov.mk
+include ${srcdir}/mk/compile.mk
+include ${srcdir}/mk/install.mk
+include ${srcdir}/mk/tests.mk
+
+### local rules
 
 sbin_PROGRAMS = \
 	dhcpd-pd \
@@ -81,58 +68,21 @@ dhcpd-pd_SOURCES = \
 dhcpd-pd-net6-combine_SOURCES = \
 	src/net6-combine.c
 
-include ${srcdir}/tests/Modules.mk
+### include subdir rules
+
+include $(patsubst %,${srcdir}/%/Modules.mk,${SUBDIRS})
+
+###
 
 all:	${sbin_PROGRAMS}
 
 world:	all ${noinst_PROGRAMS}
 
-analyze:	$(addprefix .analyze-,${sbin_PROGRAMS})
+run-tests:	$(addprefix .run-test-,$(TESTS))
 
-clean:
-	rm -f ${sbin_PROGRAMS} ${noinst_PROGRAMS}
-	rm -f *.gcno *.gcda ${LCOV_INFO}
-	rm -rf ${GENHTML_OUTDIR} .gcov
+### register build objects
 
-install:	.install-sbin
+$(call register_tests,${TESTS})
+$(call register_programs,${sbin_PROGRAMS} ${noinst_PROGRAMS})
 
-.install-sbin:	${sbin_PROGRAMS}
-	${MKDIR_P} ${DESTDIR}${sbindir}
-	${INSTALL_BIN} $^ ${DESTDIR}${sbindir}/
-
-## HACK: this is ugly but gcc puts .gcno files always into the top
-## level directory but we need these files per-target.  We move them
-## manually but this requires that only one gcc instance is running
-.NOTPARALLEL:
-
-${sbin_PROGRAMS} ${noinst_PROGRAMS}:
-	rm -f *.gcno
-	$(call compile_link,$(filter %.c,$^))
-	mkdir -p '${builddir}/.gcov/${@F}'
-	for i in *.gcno; do ! test -e "$$i" || mv $$i ${builddir}/.gcov/${@F}/; done
-
-run-lcov:
-	${LCOV} --zerocounters -d ${builddir}
-	@echo "================== running tests ==================="
-	${MAKE} --no-print-directory run-tests TEST_MODE=lcov
-	@echo "================== combining lcov data ==================="
-	for i in .gcov/*/test.info; do echo "-a $$i"; done | xargs \
-		${LCOV} ${LCOV_FLAGS} --output ${LCOV_INFO}
-	@echo "================== generating html output ==================="
-	${GENHTML} -o ${GENHTML_OUTDIR} ${LCOV_INFO}
-
-run-tests:	${noinst_PROGRAMS}
-	${MAKE} $(addprefix .run-test-,$^)
-
-
-$(addprefix .analyze-,${sbin_PROGRAMS}):.analyze-%:
-	$(call analyze,$(filter %.c,$^))
-
-$(addprefix .run-test-,${noinst_PROGRAMS}):.run-test-%:	%
-	$<
-	$(if ${TEST_MODE},${MAKE} --no-print-directory .run-${TEST_MODE}-$*)
-
-$(addprefix .run-lcov-,${noinst_PROGRAMS}):.run-lcov-%:	%
-	${LCOV} ${LCOV_FLAGS} -c -d .gcov/${<F} -o .gcov/${<F}/test.info
-
-$(foreach p,${sbin_PROGRAMS} ${noinst_PROGRAMS},$(eval $(call register_program,$p)))
+$(call register_install,sbin,PROGRAMS)

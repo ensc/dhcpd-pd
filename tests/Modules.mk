@@ -1,4 +1,7 @@
-noinst_PROGRAMS += \
+TESTS += \
+	${TEST_BINARIES} \
+
+TEST_BINARIES += \
 	tests/00-utils_network \
 	tests/00-utils_reliability \
 	tests/00-utils_xmit \
@@ -66,6 +69,15 @@ tests/99-coverage_SOURCES = \
 	tests/test-base.c \
 	${dhcpd-pd_SOURCES} \
 
-$(filter tests/%,${noinst_PROGRAMS}):	OPTFLAGS=-O1 -g3 -DTESTSUITE -Dmain=orig_main ${PROFILE_FLAGS}
-$(filter tests/%,${noinst_PROGRAMS}):	CFLAGS_flto=
-$(filter tests/%,${noinst_PROGRAMS}):	LDFLAGS_flto=
+define declare_test
+noinst_PROGRAMS += $1
+
+$1:     override CFLAGS:=${TEST_CFLAGS}
+$1:	override OPTFLAGS=
+$1:	override CFLAGS_flto=
+$1:	override LDFLAGS_flto=
+endef
+
+TEST_CFLAGS = ${CFLAGS} -O1 -g3 -DTESTSUITE -Dmain=orig_main -fno-inline
+
+$(foreach t,${TEST_BINARIES},$(eval $(call declare_test,$t)))
