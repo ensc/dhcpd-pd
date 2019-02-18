@@ -60,13 +60,27 @@ build:
   artifacts:
     expire_in: 1 day
     paths:
-      - .lcov-html
+      - build-gcov/.lcov-html
   script:
-    - dnf install -y lcov gcc openssl-devel make clang
+    - dnf install -y lcov gcc openssl-devel make clang valgrind
+
+    - |
+      _make_dir() {
+        d=build-$1
+        shift
+        mkdir -p $d
+        make -j -C $d -f ../Makefile clean
+        make -j -C $d -f ../Makefile "$@"
+      }
+
+    # run VPATH builds first
+    - _make_dir world   world
+    - _make_dir analyze analyze
+    - _make_dir gcov    run-gcov || ":"
+
+    # run non-VPATH build
+    - make clean
     - make -j world
-    - make -j analyze
-    - make run-gcov || ":"
-    - lcov --list dhcpd-pd.lcov.info || ":"
 
 coverity:
   stage: build
@@ -117,4 +131,4 @@ pages:
     - build
   script:
     - mkdir -p public
-    - mv .lcov-html public/lcov
+    - mv build-gcov/.lcov-html public/lcov
