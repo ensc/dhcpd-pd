@@ -22,6 +22,10 @@ ifdef HAVE_NO_GETRANDOM
 AM_CPPFLAGS +=	-DHAVE_NO_GETRANDOM
 endif
 
+ifdef IN_COVSCAN
+AM_CPPFLAGS +=	-include ${srcdir}/contrib/coverity-compat.h
+endif
+
 SUBDIRS = tests
 
 ### set the default target
