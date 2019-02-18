@@ -185,6 +185,12 @@ static void dhcp_iapd_exec_fill_globals(void)
 	g_tm_delta_ms = msec_real - msec_boot;
 }
 
+static void _unused_ dhcp_iapd_free_env(struct env_buf *env)
+{
+	free(env->env);
+	free(env->strbuf);
+}
+
 static void dhcp_iapd_fill_env(struct env_buf *env,
 			       struct dhcp_iapd const *iapd,
 			       struct dhcp_context *ctx,
