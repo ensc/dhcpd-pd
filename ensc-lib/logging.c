@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 
 #include "compiler.h"
 
@@ -101,6 +102,21 @@ char const *  __attribute__((__weak__)) log_transform_fmt(char const *fmt)
 	return strdup(fmt);
 }
 
+static bool log_fd_is_open(void)
+{
+	static int	last_log_fd = -1;
+	bool		is_open = false;
+	struct stat	st;
+
+	if (_log_fd == -1)
+		return false;
+
+	if (_log_fd != last_log_fd)
+		is_open = fstat(_log_fd, &st) >= 0;
+
+	return is_open;
+}
+
 void _log_msg(unsigned int lvl, unsigned int domain,
 	      char const *fn, unsigned int line,
 	      char const *fmt, ...)
@@ -109,13 +125,16 @@ void _log_msg(unsigned int lvl, unsigned int domain,
 	struct timeval          tv;
 	struct tm               tm;
 	int const		orig_errno = errno;
+	bool			is_locked = false;
 
 	if ((lvl & L_POP))
 		_log_pop();
 
-	if (lockf(_log_fd, F_LOCK, 0) < 0) {
-		/* noop; this branch is to avoid -Wunused-result warnings */
-	}
+	if (!log_fd_is_open())
+		goto finish;
+
+	if (lockf(_log_fd, F_LOCK, 0) >= 0)
+		is_locked = true;
 
 	if (!fmt)
 		/* when called with NULL fmt; skip output and honor L_POP and
@@ -168,8 +187,7 @@ void _log_msg(unsigned int lvl, unsigned int domain,
 		dprintf(_log_fd, "\n");
 
 finish:
-
-	if (lockf(_log_fd, F_ULOCK, 0) < 0) {
+	if (is_locked && lockf(_log_fd, F_ULOCK, 0) < 0) {
 		/* noop; this branch is to avoid -Wunused-result warnings */
 	}
 
