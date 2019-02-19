@@ -61,6 +61,7 @@ build:
     expire_in: 1 day
     paths:
       - build-gcov/.lcov-html
+      - build-analyze/*.plist
   script:
     - dnf install -y lcov gcc openssl-devel make clang valgrind
 
@@ -75,7 +76,7 @@ build:
 
     # run VPATH builds first
     - _make_dir world   run-tests
-    - _make_dir analyze analyze
+    - _make_dir analyze analyze ANALYZE_OUTPUT=html || ':'
     - _make_dir gcov    run-gcov || ":"
 
     # run non-VPATH build
@@ -133,3 +134,4 @@ pages:
   script:
     - mkdir -p public
     - mv build-gcov/.lcov-html public/lcov
+    - mv build-analyze  public/analyze || ':'
