@@ -4,23 +4,17 @@ stages:
   - build
   - deploy
 
-prepare:coverity:
-  stage: prepare
-  only:
-    - /^coverity-scan$/
-  artifacts:
-    expire_in: 1 day
+.prepare:coverity: &coverity
+  cache:
+    key: coverity
     paths:
-      - covcache.tar.gz
+      - .coverity
   variables:
-    GIT_STRATEGY: none
-    GIT_SUBMODULE_STRATEGY: none
-  script:
-    - d=/cache
-    - test -d "$d" || d=/tmp
-    - echo "Using '$d' as cache location"
+    COVERITY_RESULTS_DIR: cov-int
+  before_script:
+    - d=.coverity
+    - mkdir -p "$d"
     - covtar=$d/coverity.tar.gz
-    - cachetar=$d/covcache.tar.gz
     - |
       _curl() {
         curl --silent --show-error --fail \
@@ -39,20 +33,41 @@ prepare:coverity:
     - |
       if ! test -e "$covtar"; then
         echo "Downloading coverity scan tool"
-        rm -f "$cachetar"
         _curl --output "$covtar"
       fi
 
-    - |
-      if ! test -e "$cachetar"; then
-        echo "Repacking coverity scan tool"
-        mkdir /tmp/opt
-        tar xzf "$covtar" -C /tmp/opt
-        tar czf /tmp/covcache.tar -C /tmp/opt/cov-analysis-* . --owner root --group root --mode a+rX,go-w
-        mv /tmp/covcache.tar "$cachetar"
-      fi
+    - rm -rf /tmp/opt
+    - mkdir -p /tmp/opt
+    - tar xzf "$covtar" -C /tmp/opt --no-same-owner --strip-components=2
+    - PATH=/tmp/opt/bin:$PATH
 
-    - cp --reflink=auto "$cachetar" covcache.tar.gz
+    - |
+      _cov_build() {
+        cov-build --dir "$COVERITY_RESULTS_DIR" "$@"
+      }
+
+      _cov_submit() {
+        RESULTS_ARCHIVE=/tmp/analysis-results.tgz
+
+        echo "==== Importing SCM information"
+        cov-import-scm --dir "$COVERITY_RESULTS_DIR" --scm git --log "$COVERITY_RESULTS_DIR"/scm_log.txt
+
+        rm -f "$RESULTS_ARCHIVE"
+        echo "==== Creating tarball"
+        tar czf "$RESULTS_ARCHIVE" "$COVERITY_RESULTS_DIR" --owner root --group root --mode a+rX,go-w
+
+        echo "==== Submitting build results"
+        curl \
+          --fail --silent --show-error \
+          --write-out '\n%{http_code}: %{size_upload} bytes uploaded; %{size_download} donwloaded in %{time_connect} seconds\n' \
+          --form "token=$COVERITY_TOKEN" \
+          --form "project=$COVERITY_PROJECT" \
+          --form "file=@$RESULTS_ARCHIVE" \
+          --form "version=$CI_COMMIT_SHA" \
+          --form "description=Travis CI build" \
+          --form "email=$GITLAB_USER_EMAIL" \
+          https://scan.coverity.com/builds
+      }
 
 build:
   stage: build
@@ -84,41 +99,18 @@ build:
     - make -j world
 
 coverity:
+  <<: *coverity
   stage: build
   only:
     - /^coverity-scan$/
-  dependencies:
-    - prepare:coverity
   artifacts:
     expire_in: 1 day
     paths:
       - cov-int/
   script:
     - dnf install -y gcc openssl-devel make git-core
-
-    - mkdir /tmp/opt
-    - tar xzf covcache.tar.gz -C /tmp/opt
-    - PATH=/tmp/opt/bin:$PATH
-
-    - RESULTS_DIR=cov-int
-    - RESULTS_ARCHIVE=analysis-results.tgz
-
-    - cov-build --dir "$RESULTS_DIR" make IN_COVSCAN=1 world
-    - cov-import-scm --dir "$RESULTS_DIR" --scm git --log "$RESULTS_DIR"/scm_log.txt
-
-    - tar czf "$RESULTS_ARCHIVE" "$RESULTS_DIR" --owner root --group root --mode a+rX,go-w
-
-    - |
-      curl \
-        --fail --silent --show-error \
-        --write-out '\n%{http_code}: %{size_upload} bytes uploaded; %{size_download} donwloaded in %{time_connect} seconds\n' \
-        --form "token=$COVERITY_TOKEN" \
-        --form "project=$COVERITY_PROJECT" \
-        --form "file=@$RESULTS_ARCHIVE" \
-        --form "version=$CI_COMMIT_SHA" \
-        --form "description=Travis CI build" \
-        --form "email=$GITLAB_USER_EMAIL" \
-        https://scan.coverity.com/builds
+    - _cov_build make IN_COVSCAN=1 world
+    - _cov_submit
 
 pages:
   stage: deploy
