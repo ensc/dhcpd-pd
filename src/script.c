@@ -257,6 +257,7 @@ static void dhcp_iapd_exec_script(struct dhcp_iapd const *iapd,
 
 	execle(ctx->script, ctx->script, state_id, NULL, x_env_finalize(&env));
 	pr_err("execle(): %s", strerror(errno));
+	dhcp_iapd_free_env(&env);
 }
 
 int dhcp_iapd_run_script(struct dhcp_iapd const *iapd,
