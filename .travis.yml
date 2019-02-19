@@ -20,4 +20,4 @@ addons:
 dist: xenial
 script:
 - make HAVE_NO_GETRANDOM=1 -j all CFLAGS_flto= LDFLAGS_lfto=
-- make HAVE_NO_GETRANDOM=1 run-lcov || ":"
+- make HAVE_NO_GETRANDOM=1 run-gcov || ":"
