@@ -1140,8 +1140,8 @@ static bool fill_iapd_option(struct dhcp_buffer *buf,
 		offset += buf_iaprefix.len;
 	}
 
-	return buffer_add_raw(buf, DHCPV6_OPTION_IA_PD, opt_iapd, sizeof opt_iapd,
-			      offset - sizeof opt_iapd);
+	return buffer_add_raw(buf, DHCPV6_OPTION_IA_PD, opt_iapd,
+			      sizeof *opt_iapd, offset - sizeof *opt_iapd);
 }
 
 static int send_dhcp_buffer(struct dhcp_iapd *iapd,
