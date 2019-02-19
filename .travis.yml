@@ -19,5 +19,7 @@ addons:
 
 dist: xenial
 script:
+- make clean
 - make HAVE_NO_GETRANDOM=1 -j run-tests CFLAGS_flto= LDFLAGS_lfto=
+- make clean
 - make HAVE_NO_GETRANDOM=1 run-gcov || ":"
