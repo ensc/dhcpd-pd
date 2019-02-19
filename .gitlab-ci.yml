@@ -74,7 +74,7 @@ build:
       }
 
     # run VPATH builds first
-    - _make_dir world   world
+    - _make_dir world   run-tests
     - _make_dir analyze analyze
     - _make_dir gcov    run-gcov || ":"
 
