@@ -99,7 +99,7 @@ coverity:
     - tar xzf covcache.tar.gz -C /tmp/opt
     - PATH=/tmp/opt/bin:$PATH
 
-    - RESULTS_DIR=`pwd`/cov-int
+    - RESULTS_DIR=cov-int
     - RESULTS_ARCHIVE=analysis-results.tgz
 
     - cov-build --dir "$RESULTS_DIR" make IN_COVSCAN=1 world
