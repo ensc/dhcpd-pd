@@ -12,7 +12,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-ANALYZE =	clang --analyze
+ANALYZE = \
+	clang --analyze  --analyzer-output ${ANALYZE_OUTPUT} \
+	$(foreach a,${ANALYZE_CHECKERS}, -Xclang -analyzer-checker=$a) \
+
+ANALYZE_OUTPUT = text
+
+ANALYZE_CHECKERS = \
+	alpha core deadcode nullability security unix valist
 
 compile_link = ${CC} -o $@ \
 	${AM_CPPFLAGS} ${CPPFLAGS} \
