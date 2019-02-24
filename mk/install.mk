@@ -25,7 +25,7 @@ __install_HEADERS  = ${INSTALL_DATA}
 define _register_install
 install:	.install-$1
 .install-$1:	$${$1_$2}
-	$${MKDIR_P} -d -m 0755 $${DESTDIR}$${${1}dir}
+	$${MKDIR_P} -m 0755 $${DESTDIR}$${${1}dir}
 	$${__install_$2} $$^ $${DESTDIR}$${${1}dir}
 endef
 
