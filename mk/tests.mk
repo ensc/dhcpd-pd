@@ -25,7 +25,7 @@ TESTMODES = \
 define _register_test
 _testmodes :=	$$(if $$($1_TESTMODES),$$($1_TESTMODES),$${TESTMODES})
 
-$${_testrules}: $1
+$${_testrules}:	$1
 $${_testrules}:
 .run-test-$1:	override ARGS=$${$1_ARGS}
 .run-test-$1:	override _TESTMODES:=$${_testmodes}

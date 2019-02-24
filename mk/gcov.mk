@@ -72,17 +72,17 @@ lcov_remove = ${LCOV} --remove $1 --output-file $1 $(abspath $2)
 _gcov_pattern = ${GCOV_OUTDIR}/*/*.gcda ${GCOV_OUTDIR}/*/*.gcno
 _gcov_subdirs = $(sort $(dir $(wildcard ${_gcov_pattern})))
 
-%/lcov.info:    %
+%/lcov.info:	%
 	@rm -f $@
 	${LCOV} ${LCOV_FLAGS} -q --output $@ -c -d "${@D}"
 	@touch $@
 
-${LCOV_INFO}:   $(addsuffix /lcov.info,${_gcov_subdirs})
+${LCOV_INFO}:	$(addsuffix /lcov.info,${_gcov_subdirs})
 	for i in $^; do \
-	        test -s "$$i" && echo "-a $$i"; \
+		test -s "$$i" && echo "-a $$i"; \
 	done | xargs ${LCOV} ${LCOV_FLAGS} --output $@
 	$(call lcov_remove,$@,${BUILTSOURCES})
 
-.run-gcov:      ${LCOV_INFO}
+.run-gcov:	${LCOV_INFO}
 	${LCOV} --list $<
 	${GENHTML} -o ${GENHTML_OUTDIR} $<
