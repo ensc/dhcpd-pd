@@ -27,6 +27,7 @@ _testmodes :=	$$(if $$($1_TESTMODES),$$($1_TESTMODES),$${TESTMODES})
 
 $${_testrules}:	$1
 $${_testrules}:
+.run-test-$1:	export srcdir=${srcdir}
 .run-test-$1:	override ARGS=$${$1_ARGS}
 .run-test-$1:	override _TESTMODES:=$${_testmodes}
 .run-test-$1:	$1 $${$1_DEPS}
