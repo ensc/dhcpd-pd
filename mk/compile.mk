@@ -60,4 +60,5 @@ register_programs = \
 clean:	.clean-exec
 .clean-exec:
 	rm -f ${bin_PROGRAMS} ${sbin_PROGRAMS} ${noinst_PROGRAMS}
-	rm -f *.stamp *.gcda *.gcno *.plist
+	rm -f *.stamp *.gcda *.gcno
+	rm -rf *.plist
