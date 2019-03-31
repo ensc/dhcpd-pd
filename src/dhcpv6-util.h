@@ -66,6 +66,12 @@ dhcpv6_reliability_get_rt(struct dhcpv6_reliability const *rel)
 	return time_add_ms(rel->rt_t, rel->rt);
 }
 
+inline static dhcp_time_t
+dhcpv6_reliability_get_irt(struct dhcpv6_reliability const *rel)
+{
+	return time_add_ms(rel->rt_t, rel->parm->irt);
+}
+
 void dhcpv6_reliability_init(struct dhcpv6_reliability *rel,
 			     struct dhcpv6_reliability_parm const *parm,
 			     dhcp_time_t now);
