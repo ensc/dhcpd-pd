@@ -340,11 +340,11 @@ static bool is_reliability_timeout_complete(struct dhcp_iapd const *iapd,
 	 * to arrive*/
 	if (iapd->state != IAPD_STATE_SOLICIT ||
 	    iapd->iostate != IAPD_IOSTATE_RECV ||
-	    time_cmp(now, dhcpv6_reliability_get_rt(rel)) < 0)
+	    time_cmp(now, dhcpv6_reliability_get_irt(rel)) < 0)
 		return false;
 
 	/* TODO: do further checks? */
-	return rel->num_tries == 1 && iapd->server.has_id;
+	return iapd->server.has_id;
 }
 
 static void finish_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
@@ -613,6 +613,20 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 			pr_warn("%s timeout; retrying", state->name);
 			iapd->iostate = IAPD_IOSTATE_SEND;
 			goto out;
+		}
+
+		/* https://tools.ietf.org/html/rfc3315#section-17.1.2
+		 *
+		 * see is_reliability_timeout_complete() too */
+		if (iapd->state == IAPD_STATE_SOLICIT && iapd->server.has_id) {
+			to = dhcpv6_reliability_get_irt(rel);
+			/* we should not reach this because times do not
+			 * change between is_reliability_timeout_complete()
+			 * and this check... */
+			if (time_cmp(to, now) < 0) {
+				pr_err("INTERNAL ERROR: initial SOLICIT timeout raced");
+				to = now;
+			}
 		}
 
 		timeout = time_min(timeout, to);
