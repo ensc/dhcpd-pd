@@ -526,6 +526,9 @@ static int dhcp_handle_response(struct dhcp_session *ses, struct dhcp_context *c
 		return -1;
 	}
 
+	/* will stay when all iapd[] slots are unused */
+	rc = -1;
+
 	for (size_t i = 0; i < ARRAY_SIZE(ses->iapd); ++i) {
 		struct dhcp_iapd	*iapd = &ses->iapd[i];
 
