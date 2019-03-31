@@ -1029,7 +1029,7 @@ int dhcp_iapd_recv(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	}
 
 	if (iapd->iostate != IAPD_IOSTATE_RECV) {
-		pr_debug("not in RECV state");
+		pr_warn("not in RECV state");
 		return 1;
 	}
 
