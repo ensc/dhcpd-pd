@@ -424,7 +424,8 @@ static int print_iapd(FILE *stream, struct printf_info const *info,
 	if (!iapd)
 		return print_null(stream, info);
 
-	ptr += sprintf(ptr, "%u (%s/%s)%s%s, tm: %T -> %T, T1:%u -> %u, T2:%u -> %u, server: %P", iapd->id,
+	ptr += sprintf(ptr, "%u (%s/%s)%s%s, tm: %T -> %T, T1:%u -> %u, T2:%u -> %u, server: %P (%u)",
+		       iapd->id,
 		       dhcp_iapd_state_to_str(iapd->state, state_buf),
 		       dhcp_iapd_iostate_to_str(iapd->iostate, iostate_buf),
 		       iapd->do_release ? " release" : "",
@@ -432,7 +433,7 @@ static int print_iapd(FILE *stream, struct printf_info const *info,
 		       &iapd->pending.lease_tm, &iapd->active.lease_tm,
 		       iapd->pending.t1, iapd->active.t1,
 		       iapd->pending.t2, iapd->active.t2,
-		       &iapd->server.addr);
+		       &iapd->server.addr, &iapd->server.preference);
 
 	(void)ptr;
 
