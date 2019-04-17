@@ -2,6 +2,7 @@
 Description=DHCPv6 client for prefix delegation on %I
 After=network.target
 After=sys-subsystem-net-devices-%i.device
+Wants=sys-subsystem-net-devices-%i.device
 
 [Service]
 Type=notify
