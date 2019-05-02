@@ -37,6 +37,7 @@ static struct in6_addr do_combine(struct in6_addr const *prefix,
 				  uint64_t id,
 				  unsigned int id_bits)
 {
+	static uint64_t const	ONE_64 = ~(uint64_t)0;
 	uint64_t	num_prefix[2];
 	uint64_t	num_mask[2];
 	uint64_t	num_bits[2];
@@ -52,16 +53,15 @@ static struct in6_addr do_combine(struct in6_addr const *prefix,
 	num_prefix[0] = be64toh(num_prefix[0]);
 	num_prefix[1] = be64toh(num_prefix[1]);
 
-	num_mask[0] = ~(uint64_t)0;
 	if (prefix_len == 0) {
-		num_mask[0]   = 0;
-		num_mask[1]   = 0;
+		num_mask[0] = 0;
+		num_mask[1] = 0;
 	} else if (prefix_len < 64) {
-		num_mask[0] <<= 64 - prefix_len;
-		num_mask[1]   = 0;
+		num_mask[0] = ONE_64 << (64 - prefix_len);
+		num_mask[1] = 0;
 	} else {
-		num_mask[1]   = ~(uint64_t)0;
-		num_mask[1] <<= 128 - prefix_len;
+		num_mask[0] = ONE_64;
+		num_mask[1] = ONE_64 << (128 - prefix_len);
 	}
 
 	sft = 128 - prefix_len - id_bits;
