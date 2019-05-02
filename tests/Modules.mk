@@ -1,5 +1,6 @@
 TESTS += \
 	${TEST_BINARIES} \
+	${TEST_SCRIPTS} \
 
 TEST_BINARIES += \
 	tests/00-utils_network \
@@ -82,3 +83,10 @@ endef
 TEST_CFLAGS = ${CFLAGS} -O1 -g3 -DTESTSUITE -Dmain=orig_main -fno-inline
 
 $(foreach t,${TEST_BINARIES},$(eval $(call declare_test,$t)))
+
+
+define shell_test
+$1_TESTMODES = plain valgrind_wrapped
+endef
+
+$(foreach t,${TEST_SCRIPTS},$(eval $(call shell_test,$t)))
