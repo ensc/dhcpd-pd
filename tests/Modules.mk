@@ -12,6 +12,9 @@ TEST_BINARIES += \
 	tests/01-logging \
 	tests/99-coverage \
 
+TEST_SCRIPTS += \
+	tests/80-net6-combine.sh \
+
 tests/00-utils_network_SOURCES = \
 	tests/00-utils_network.c \
 	tests/test-base.c \
@@ -69,6 +72,12 @@ tests/99-coverage_SOURCES = \
 	tests/99-coverage.c \
 	tests/test-base.c \
 	${dhcpd-pd_SOURCES} \
+
+tests/80-net6-combine.sh_ARGS = \
+	${builddir}/dhcpd-pd-net6-combine
+
+tests/80-net6-combine.sh_DEPS = \
+	dhcpd-pd-net6-combine
 
 define declare_test
 noinst_PROGRAMS += $1
