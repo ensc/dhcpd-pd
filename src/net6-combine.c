@@ -19,6 +19,7 @@
 #include <endian.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <assert.h>
 
@@ -29,7 +30,7 @@
 
 static void show_help(void)
 {
-	printf("Usage: net6-combine <prefix> <len> <id> <id-bits>\n");
+	printf("Usage: net6-combine <prefix> <len> <id> <id-bits> [raw]\n");
 }
 
 static struct in6_addr do_combine(struct in6_addr const *prefix,
@@ -99,13 +100,14 @@ int main(int argc, char *argv[])
 	unsigned int		id_bits;
 	int			rc;
 	char			res_buf[INET6_ADDRSTRLEN];
+	bool			is_raw;
 
 	if (argc > 1 && strcmp(argv[1], "--help") == 0) {
 		show_help();
 		return EX_OK;
 	}
 
-	if (argc != 5) {
+	if (argc != 5 && argc != 6) {
 		fprintf(stderr, "bad number of arguments; use --help\n");
 		return EX_USAGE;
 	}
@@ -115,6 +117,15 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "failed to convert '%s' to ipv6 address\n",
 			argv[1]);
 		return EX_DATAERR;
+	}
+
+	if (argc < 6) {
+		is_raw = false;
+	} else if (strcmp(argv[5], "raw") == 0) {
+		is_raw = true;
+	} else {
+		fprintf(stderr, "invalid 'raw' parameter\n");
+		return EX_USAGE;
 	}
 
 	pos     = atoi(argv[2]);
@@ -132,7 +143,17 @@ int main(int argc, char *argv[])
 	}
 
 	addr = do_combine(&addr, pos, id, id_bits);
-	inet_ntop(AF_INET6, &addr, res_buf, sizeof res_buf);
+
+	if (!is_raw) {
+		inet_ntop(AF_INET6, &addr, res_buf, sizeof res_buf);
+	} else {
+		char	*ptr = res_buf;
+
+		for (size_t i = 0; i < sizeof addr.s6_addr; ++i)
+			ptr += sprintf(ptr, "%02x", addr.s6_addr[i]);
+
+		*ptr = '\0';
+	}
 
 	printf("%s\n", res_buf);
 }
