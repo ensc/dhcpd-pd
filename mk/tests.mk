@@ -53,3 +53,6 @@ run_testprog = \
 
 ..run-test-valgrind:	${PROG} FORCE
 	@$(call run_testprog,${VALGRIND_MEMCHECK})
+
+..run-test-valgrind_wrapped:	${PROG} FORCE
+	@$(call run_testprog,,${VALGRIND_MEMCHECK} --)
