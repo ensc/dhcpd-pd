@@ -1,4 +1,5 @@
 *.plist
+.dirstamp
 /compile_commands.json
 /auto
 /README.tex
