@@ -835,6 +835,10 @@ int main(int argc, char *argv[])
 				err_cnt = 0;
 
 			sd_notify(0, "WATCHDOG=1");
+		} else if (!next_iapd) {
+			/* this is prevented by program logic... */
+			pr_err("INTERNAL ERROR: next_iapd is NULL\n");
+			sleep(2);
 		} else {
 			rc = dhcp_iapd_run(next_iapd, &ctx);
 			if (rc < 0)
