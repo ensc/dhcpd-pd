@@ -89,7 +89,9 @@ $1:	override CFLAGS_flto=
 $1:	override LDFLAGS_flto=
 endef
 
-TEST_CFLAGS = ${CFLAGS} -O1 -g3 -DTESTSUITE -Dmain=orig_main -fno-inline
+TEST_CFLAGS = ${CFLAGS} -O1 -g3 -DTESTSUITE -Dmain=orig_main -fno-inline \
+	-fstrict-overflow -ftrapv \
+	-fsanitize=undefined -fsanitize-address-use-after-scope
 
 $(foreach t,${TEST_BINARIES},$(eval $(call declare_test,$t)))
 
