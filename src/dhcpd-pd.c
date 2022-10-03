@@ -186,7 +186,7 @@ static int dhcp_handle_rtm_addr(struct dhcp_session *ses,
 		size_t		rta_len  = RTA_PAYLOAD(rta);
 
 		switch (rta->rta_type) {
-		case IFA_ADDRESS:
+		case IFA_LOCAL:
 			if (rta_len < sizeof addr) {
 				pr_warn("insufficient space for IFA_ADDRESS");
 			} else {
