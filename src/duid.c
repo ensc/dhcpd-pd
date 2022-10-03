@@ -40,11 +40,14 @@ static void fill_duid(struct dhcpv6_duid *duid, void const *data, size_t len)
 	uint16_t	type = htobe16(2);
 	uint32_t	ent_num = htobe32(DUID_ENUM);
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 	SHA256_Init(&ctx);
 	SHA256_Update(&ctx, DUID_SALT0, strlen(DUID_SALT0));
 	SHA256_Update(&ctx, data, len);
 	SHA256_Update(&ctx, DUID_SALT1, strlen(DUID_SALT1));
 	SHA256_Final(buf, &ctx);
+#pragma GCC diagnostic pop
 
 	_Static_assert(sizeof duid->id >= sizeof type + sizeof ent_num + 10,
 		       "insufficient space");
