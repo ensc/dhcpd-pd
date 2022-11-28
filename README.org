@@ -14,7 +14,15 @@ reconnect.
  - supports only one interface; when there are multiple interfaces,
    program must be started for each of them
 
+* Usage
+
+```
+/usr/sbin/dhcpd-pd ppp0 /etc/dhcpd-pd/run
+```
+
 * Scripts
+
+see [[https://gitlab.com/ensc-groups/bpi-router/tools/setup/-/blob/master/files/dhcpd-pd/run][run]] for a sample script.
 
 ** Environment
 
@@ -45,8 +53,8 @@ reconnect.
  - =DHCP_SERVER_PREF= :: (optionally) the numeric preference value (8
       bits) of the DHCP server
  - =DHCP_IAPREFIX_NUM= :: number of prefixes
- - =DHCP_IAPREFIX_0_TM= :: the time in seconds since epoch when prefix
-      has been
+ - =DHCP_IAPREFIX_x_TM= :: the time in seconds since epoch when prefix
+      has been received
  - =DHCP_IAPREFIX_x_LT_PREF= :: the pref lifetime of the prefix in
       seconds since epoch; =x= is the index of the prefix
  - =DHCP_IAPREFIX_x_LT_PREF_SEC= :: the raw pref lifetime of the
@@ -56,7 +64,7 @@ reconnect.
  - =DHCP_IAPREFIX_x_LT_VALID_SEC= :: the raw valid lifetime of the
       validix in seconds; =x= is the index of the validix
  - =DHCP_IAPREFIX_x_NET_ADDR= :: the IPv6 address of the prefix
- - =DHCP_IAPREFIX_0_NET_LEN= :: the len of the prefix
+ - =DHCP_IAPREFIX_x_NET_LEN= :: the len of the prefix
 
 *** Example
 
