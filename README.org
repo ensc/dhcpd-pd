@@ -16,9 +16,9 @@ reconnect.
 
 * Usage
 
-```
+#+BEGIN_SRC sh
 /usr/sbin/dhcpd-pd ppp0 /etc/dhcpd-pd/run
-```
+#+END_SRC
 
 * Scripts
 
