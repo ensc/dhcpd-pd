@@ -230,7 +230,7 @@ static bool buffer_add_iaprefix(struct dhcp_buffer *buf,
 
 	if (sel != IAPD_PREFIX_SEL_PREF) {
 		opt = (struct dhcpv6_option_iaprefix) {
-			.pref_lftm 	= CPU_TO_BE32(iaprefix->pref_lt),
+			.pref_lftm	= CPU_TO_BE32(iaprefix->pref_lt),
 			.valid_lftm	= CPU_TO_BE32(iaprefix->valid_lt),
 			.prefix_len	= iaprefix->net.len,
 		};
@@ -406,7 +406,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 			iapd->state = state->t2_to;
 			iapd->iostate = IAPD_IOSTATE_TIMEOUT;
 			goto out;
-		}			
+		}
 
 		timeout = time_min(timeout, tm);
 	}
@@ -415,14 +415,14 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 	if (state->valid_to != IAPD_STATE_NONE) {
 		dhcp_time_t	to;
 
-		to = dhcp_iapd_min_valid_tm(iapd, state->tm_margin);	
+		to = dhcp_iapd_min_valid_tm(iapd, state->tm_margin);
 		if (time_cmp(to, now) < 0) {
 			pr_debug("%s valid tm %pT reached; going to %s",
 				 state->name, &to, STATES[state->valid_to].name);
 			iapd->state = state->valid_to;
 			iapd->iostate = IAPD_IOSTATE_TIMEOUT;
 			goto out;
-		}			
+		}
 
 		timeout = time_min(timeout, to);
 	}
@@ -438,7 +438,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 			iapd->state = state->t1_to;
 			iapd->iostate = IAPD_IOSTATE_TIMEOUT;
 			goto out;
-		}			
+		}
 
 		timeout = time_min(timeout, tm);
 	}
@@ -448,14 +448,14 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 		dhcp_time_t	to;
 
 		to = dhcp_iapd_min_pref_tm(iapd, state->tm_margin);
-		
+
 		if (time_cmp(to, now) < 0) {
 			pr_warn("%s pref tm %pT reached; going to %s",
 				state->name, &to, STATES[state->pref_to].name);
 			iapd->state = state->pref_to;
 			iapd->iostate = IAPD_IOSTATE_TIMEOUT;
 			goto out;
-		}			
+		}
 
 		timeout = time_min(timeout, to);
 	}
@@ -482,7 +482,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 	case IAPD_STATE_UNUSED:
 		pr_err("invalid state");
 		abort();
-		
+
 	case IAPD_STATE_INIT:
 		for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
 			dhcp_iaprefix_init(&iapd->iaprefix[i].active,  now, true);
@@ -531,7 +531,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 		iapd->active = iapd->pending;
 		dhcp_iapd_run_script(iapd, ctx, "ACTIVE");
 		break;
-	
+
 	case IAPD_STATE_RENEW_INIT:
 		dhcpv6_reliability_init(rel, &dhcpv6_reliability_parm_renew, now);
 		dhcpv6_transmission_init(&iapd->xmit, now);
