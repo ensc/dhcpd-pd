@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <time.h>
 
 #define TIME_EPOCH		((dhcp_time_t){  (uint64_t)0u })
 #define TIME_INFINITY		((dhcp_time_t){ ~(uint64_t)0u })
@@ -32,6 +33,10 @@ typedef struct _dhcp_time	dhcp_time_t;
 dhcp_time_t time_now(void);
 dhcp_time_t time_get_margin(dhcp_time_t a, dhcp_time_t b,
 			    unsigned int margin_pct);
+
+/** Return the time in seconds until 'daily_renew_hhmm'.  Returns '0' iff
+   'daily_renew_hhmm' is <0 (which means there is no daily renew). */
+uint32_t time_max_lt(time_t now, int daily_renew_hhmm);
 
 inline static int		time_cmp(dhcp_time_t a, dhcp_time_t b)
 {
