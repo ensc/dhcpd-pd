@@ -18,6 +18,7 @@
 
 #include <errno.h>
 #include <arpa/inet.h>
+#include <sys/param.h>
 
 #include "../ensc-lib/compiler.h"
 
@@ -191,8 +192,9 @@ static void dhcp_iaprefix_validate(struct dhcp_iaprefix const *prefix)
 	assert(!time_is_infinity(prefix->lease_tm));
 }
 
-static void dhcp_iaprefix_init(struct dhcp_iaprefix *prefix, dhcp_time_t now,
-			       bool init_addr)
+static void dhcp_iaprefix_init(struct dhcp_iaprefix *prefix,
+			       struct dhcp_context const *ctx,
+			       dhcp_time_t now, bool init_addr)
 {
 	if (prefix->preferences.is_set) {
 		prefix->pref_lt    = prefix->preferences.pref_lt;
@@ -207,6 +209,11 @@ static void dhcp_iaprefix_init(struct dhcp_iaprefix *prefix, dhcp_time_t now,
 
 		if (init_addr)
 			dhcpv6_network_zero(&prefix->net);
+	}
+
+	if (ctx->max_lt > 0) {
+		prefix->pref_lt  = MIN(prefix->pref_lt,  ctx->max_lt);
+		prefix->valid_lt = MIN(prefix->valid_lt, ctx->max_lt);
 	}
 
 	prefix->lease_tm = TIME_EPOCH;
@@ -504,8 +511,8 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 
 	case IAPD_STATE_INIT:
 		for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
-			dhcp_iaprefix_init(&iapd->iaprefix[i].active,  now, true);
-			dhcp_iaprefix_init(&iapd->iaprefix[i].pending, now, true);
+			dhcp_iaprefix_init(&iapd->iaprefix[i].active,  ctx, now, true);
+			dhcp_iaprefix_init(&iapd->iaprefix[i].pending, ctx, now, true);
 
 			iapd->iaprefix[i].active.iapd = iapd;
 			iapd->iaprefix[i].pending.iapd = iapd;
@@ -530,7 +537,7 @@ dhcp_time_t dhcp_iapd_step(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 		dhcpv6_transmission_init(&iapd->xmit, now);
 
 		for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i)
-			dhcp_iaprefix_init(&iapd->iaprefix[i].pending, now, false);
+			dhcp_iaprefix_init(&iapd->iaprefix[i].pending, ctx, now, false);
 
 		iapd->server.has_id = false;
 
@@ -1250,6 +1257,32 @@ static int send_dhcp_buffer(struct dhcp_iapd *iapd,
 	return 0;
 }
 
+struct uint32_2 {
+	uint32_t	t1;
+	uint32_t	t2;
+};
+
+static struct uint32_2 get_iapd_pref(struct dhcp_iapd const *iapd,
+				     struct dhcp_context const *ctx)
+{
+	struct uint32_2	t = {
+		.t1	= 0,
+		.t2	= 0,
+	};
+
+	if (iapd->preferences.is_set) {
+		t.t1 = iapd->preferences.t1;
+		t.t2 = iapd->preferences.t2;
+	}
+
+	if (ctx->max_lt > 0) {
+		t.t1 = MIN(t.t1, ctx->max_lt);
+		t.t1 = MIN(t.t2, ctx->max_lt);
+	}
+
+	return t;
+}
+
 static int send_solicit(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 {
 	unsigned char		raw[DHCPV6_MAX_DUID_SZ + 512];
@@ -1259,12 +1292,12 @@ static int send_solicit(struct dhcp_iapd *iapd, struct dhcp_context *ctx)
 		.max_len	= sizeof raw,
 	};
 
+	struct uint32_2		t = get_iapd_pref(iapd, ctx);
+
 	struct dhcpv6_option_iapd	opt_iapd = {
 		.id	= CPU_TO_BE32(iapd->id),
-		.t1	= CPU_TO_BE32(iapd->preferences.is_set ?
-				      iapd->preferences.t1 : 0),
-		.t2	= CPU_TO_BE32(iapd->preferences.is_set ?
-				      iapd->preferences.t2 : 0),
+		.t1	= CPU_TO_BE32(t.t1),
+		.t2	= CPU_TO_BE32(t.t2),
 	};
 
 	int			rc;
