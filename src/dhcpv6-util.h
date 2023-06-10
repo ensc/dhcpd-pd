@@ -162,6 +162,10 @@ struct dhcp_context {
 	dhcp_time_t			now;
 	dhcp_time_t			timeout;
 
+	/* maximum allowed lifetimes in 'seconds'; used to deal with daily
+	   reconnects.  Value of 0 means that there is no such limit. */
+	uint32_t			max_lt;
+
 	char const			*script;
 	struct dhcpv6_duid const	*client_id;
 

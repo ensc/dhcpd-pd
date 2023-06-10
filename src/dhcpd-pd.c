@@ -788,6 +788,7 @@ int main(int argc, char *argv[])
 			.ifidx		= session.ifidx,
 			.sig_fd		= sig_fd,
 			.now		= time_now(),
+			.max_lt		= 0,
 			.timeout	= TIME_INFINITY,
 			.sig_available	= false,
 			.data_available	= false,

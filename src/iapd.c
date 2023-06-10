@@ -762,6 +762,16 @@ static void handle_iaprefix_noprefixavail(struct dhcp_iapd *iapd)
 	iapd->iostate = IAPD_IOSTATE_ERROR;
 }
 
+static uint32_t get_be32_lt(struct dhcp_context const *ctx, be32_t lt_)
+{
+	uint32_t	lt = be32_to_cpu(lt_);
+
+	if (ctx->max_lt > 0 && ctx->max_lt < lt)
+		return ctx->max_lt;
+	else
+		return lt;
+}
+
 /**
  *
  *  Return:
@@ -773,8 +783,8 @@ static int handle_ia_prefix(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 {
 	struct dhcpv6_option_hdr const		*opt_first;
 	struct dhcp_iaprefix	*prefix = NULL;
-	uint32_t		valid_lt = be32_to_cpu(opt_prefix->valid_lftm);
-	uint32_t		pref_lt = be32_to_cpu(opt_prefix->pref_lftm);
+	uint32_t		valid_lt = get_be32_lt(ctx, opt_prefix->valid_lftm);
+	uint32_t		pref_lt = get_be32_lt(ctx, opt_prefix->pref_lftm);
 
 	dhcp_time_t		valid_tm = time_add_lt(ctx->now, valid_lt, 100);
 	dhcp_time_t		pref_tm = time_add_lt(ctx->now, pref_lt, 100);
