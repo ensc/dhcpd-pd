@@ -7,7 +7,7 @@ Wants=sys-subsystem-net-devices-%i.device
 [Service]
 Type=notify
 Environment=DHCP_PD_SCRIPT=/etc/dhcpd-pd/run
-ExecStart=/usr/sbin/dhcpd-pd %I $DHCP_PD_SCRIPT
+ExecStart=/usr/sbin/dhcpd-pd %I ${DHCP_PD_SCRIPT}
 PrivateTmp=true
 PrivateDevices=true
 
