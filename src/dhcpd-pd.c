@@ -747,6 +747,7 @@ int main(int argc, char *argv[])
 {
 	char const		*iface = argv[1];
 	char const		*script = argv[2];
+	int			daily_renew = argc > 3 ? atoi(argv[3]) : -1;
 	struct dhcp_session	session;
 	sigset_t		sig_mask;
 	int			sig_fd = -1;
@@ -788,7 +789,7 @@ int main(int argc, char *argv[])
 			.ifidx		= session.ifidx,
 			.sig_fd		= sig_fd,
 			.now		= time_now(),
-			.max_lt		= 0,
+			.max_lt		= time_max_lt(time(NULL), daily_renew),
 			.timeout	= TIME_INFINITY,
 			.sig_available	= false,
 			.data_available	= false,
