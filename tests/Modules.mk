@@ -46,6 +46,8 @@ tests/00-time_SOURCES = \
 	tests/test-base.c \
 	src/time.c \
 	src/time.h \
+	ensc-lib/logging.c \
+	ensc-lib/logging.h \
 
 tests/00-buffer_SOURCES = \
 	tests/00-buffer.c \
