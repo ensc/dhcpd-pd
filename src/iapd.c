@@ -221,6 +221,25 @@ enum iapd_prefix_selection {
 	IAPD_PREFIX_SEL_PREF,
 };
 
+static struct dhcp_iaprefix *get_iaprefix(struct dhcp_iapd *iapd,
+					  size_t idx,
+					  enum iapd_prefix_selection sel)
+{
+	switch (sel) {
+	case IAPD_PREFIX_SEL_ACTIVE:
+		return &iapd->iaprefix[idx].active;
+	case IAPD_PREFIX_SEL_PENDING:
+		return &iapd->iaprefix[idx].pending;
+	case IAPD_PREFIX_SEL_PREF:
+		return &iapd->iaprefix[idx].pending;
+	case IAPD_PREFIX_SEL_NONE:
+		return NULL;
+	}
+
+	pr_err("fallthrough; bad sel %d", sel);
+	return NULL;
+}
+
 static bool buffer_add_iaprefix(struct dhcp_buffer *buf,
 				struct dhcp_iaprefix const *iaprefix,
 				enum iapd_prefix_selection sel)
@@ -1129,11 +1148,7 @@ static bool fill_iapd_option(struct dhcp_buffer *buf,
 
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
 		struct dhcp_buffer		buf_iaprefix;
-		struct dhcp_iaprefix const	*iaprefix =
-			sel == IAPD_PREFIX_SEL_ACTIVE ? &iapd->iaprefix[i].active :
-			sel == IAPD_PREFIX_SEL_PENDING ? &iapd->iaprefix[i].pending :
-			sel == IAPD_PREFIX_SEL_PREF ? &iapd->iaprefix[i].pending :
-			NULL;
+		struct dhcp_iaprefix const	*iaprefix = get_iaprefix(iapd, i, sel);
 
 		if (!iaprefix)
 			continue;
