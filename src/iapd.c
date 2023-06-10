@@ -724,17 +724,39 @@ out:
 
 static void handle_iaprefix_noprefixavail(struct dhcp_iapd *iapd)
 {
-	if (iapd->state != IAPD_STATE_REQUEST)
+	enum iapd_prefix_selection	sel;
+
+	switch (iapd->state) {
+	case IAPD_STATE_REQUEST:
+		sel = IAPD_PREFIX_SEL_PENDING;
+		break;
+
+	case IAPD_STATE_RENEW:
+		/* on no-prefix-available during RENEW, reset lifetimes which
+		   will trigger the condition in check #3 */
+		sel = IAPD_PREFIX_SEL_ACTIVE;
+		break;
+
+	default:
 		return;
+	}
 
 	for (size_t i = 0; i < ARRAY_SIZE(iapd->iaprefix); ++i) {
-		struct dhcp_iaprefix	*tmp = &iapd->iaprefix[i].pending;
+		struct dhcp_iaprefix	*tmp = get_iaprefix(iapd, i, sel);
 
-		tmp->net.len  = 0;
-		tmp->lease_tm = TIME_EPOCH;
 		tmp->pref_lt  = 0;
 		tmp->valid_lt = 0;
-		memset(&tmp->net.prefix, 0, sizeof tmp->net.prefix);
+
+		switch (iapd->state) {
+		case IAPD_STATE_REQUEST:
+			tmp->lease_tm = TIME_EPOCH;
+			tmp->net.len  = 0;
+			memset(&tmp->net.prefix, 0, sizeof tmp->net.prefix);
+			break;
+
+		default:
+			break;
+		}
 	}
 
 	iapd->iostate = IAPD_IOSTATE_ERROR;
