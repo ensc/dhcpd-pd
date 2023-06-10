@@ -1028,8 +1028,8 @@ static int handle_ia_pd(struct dhcp_iapd *iapd, struct dhcp_context *ctx,
 	if (rc < 0)
 		goto out;
 
-	iapd->pending.t1 = be32_to_cpu(opt_iapd->t1);
-	iapd->pending.t2 = be32_to_cpu(opt_iapd->t2);
+	iapd->pending.t1 = get_be32_lt(ctx, opt_iapd->t1);
+	iapd->pending.t2 = get_be32_lt(ctx, opt_iapd->t2);
 	iapd->pending.lease_tm = ctx->now;
 
 	switch (iapd->state) {
