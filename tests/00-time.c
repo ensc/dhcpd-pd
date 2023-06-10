@@ -20,6 +20,9 @@
 #include <unistd.h>
 #include "../src/time.h"
 
+/* XXX: keep it synchronized with time.c */
+#define EXTRA_DAILY_TM	(30 * 60)
+
 static void test_00(void)
 {
 	dhcp_time_t		tm_a = TIME_EPOCH;
@@ -110,10 +113,36 @@ static void test_02(void)
 	assert(time_cmp(tm_a, tm_b) < 0);
 }
 
+#include <stdio.h>
+
+static void test_03(void)
+{
+	struct tm	tm = {
+		.tm_sec		= 59,
+		.tm_min		= 58,
+		.tm_hour	=  3,
+
+		.tm_mday	=  1,
+		.tm_mon		=  0,
+		.tm_year	= 2023,
+
+		.tm_isdst	= -1,
+	};
+
+	time_t		now = mktime(&tm);
+
+	assert(time_max_lt(now,  -1) == 0);
+	assert(time_max_lt(now, 500) == 1 * 3600 + 1 * 60 + 1  +  EXTRA_DAILY_TM);
+	assert(time_max_lt(now, 100) == 25 * 3600 + EXTRA_DAILY_TM - (3 * 3600 + 58 * 60 + 59));
+
+	/* TODO: check DST wrap */
+}
+
 #undef main
 int main(void)
 {
 	test_00();
 	test_01();
 	test_02();
+	test_03();
 }
