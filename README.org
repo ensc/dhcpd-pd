@@ -17,8 +17,10 @@ reconnect.
 * Usage
 
 #+BEGIN_SRC sh
-/usr/sbin/dhcpd-pd ppp0 /etc/dhcpd-pd/run
+/usr/sbin/dhcpd-pd ppp0 /etc/dhcpd-pd/run [HHMM]
 #+END_SRC
+
+- =HHMM= is optional and specifies the time of the daily reconnect
 
 * Scripts
 
