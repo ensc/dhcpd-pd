@@ -18,6 +18,8 @@
 
 #include <time.h>
 
+#define LOG_DOMAIN	LOG_DOMAIN_TIME
+
 dhcp_time_t time_now(void)
 {
 	struct timespec	ts;
