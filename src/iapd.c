@@ -182,7 +182,7 @@ static struct dhcpv6_reliability_parm const	dhcpv6_reliability_parm_confirm = {
 	.mrd	= 10000,
 };
 
-#define LOG_DOMAIN_IAPREFIX
+#define LOG_DOMAIN	LOG_DOMAIN_IAPREFIX
 
 static void dhcp_iaprefix_validate(struct dhcp_iaprefix const *prefix)
 {
