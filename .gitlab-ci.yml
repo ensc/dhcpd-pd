@@ -1,4 +1,4 @@
-image: fedora:29
+image: fedora:38
 stages:
   - prepare
   - build
@@ -78,7 +78,7 @@ build:
       - build-gcov/.lcov-html
       - build-analyze/*.plist
   script:
-    - dnf install -y lcov gcc openssl-devel make clang valgrind
+    - dnf install -y lcov gcc openssl-devel make clang valgrind libubsan
 
     - |
       _make_dir() {
