@@ -46,7 +46,9 @@ union sockaddr_union {
         struct sockaddr_storage storage;
 };
 
-#define offsetof(_type, _attr)	(__builtin_offsetof(_type, _attr))
+#ifndef offsetof
+#  define offsetof(_type, _attr)	(__builtin_offsetof(_type, _attr))
+#endif
 
 _hidden_ int sd_notify_supported(void)
 {
