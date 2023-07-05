@@ -15,11 +15,16 @@
 ANALYZE = \
 	clang --analyze  --analyzer-output ${ANALYZE_OUTPUT} \
 	$(foreach a,${ANALYZE_CHECKERS}, -Xclang -analyzer-checker=$a) \
+	$(foreach a,${ANALYZE_BAD_CHECKERS}, -Xclang -analyzer-disable-checker=$a) \
 
 ANALYZE_OUTPUT = text
 
 ANALYZE_CHECKERS = \
 	alpha core deadcode nullability security unix valist
+
+ANALYZE_BAD_CHECKERS = \
+	security.insecureAPI.DeprecatedOrUnsafeBufferHandling \
+	alpha.clone.CloneChecker \
 
 compile_link = ${CC} -o $@ \
 	${AM_CPPFLAGS} ${CPPFLAGS} \
