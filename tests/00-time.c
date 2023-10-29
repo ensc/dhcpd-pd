@@ -124,7 +124,7 @@ static void test_03(void)
 
 		.tm_mday	=  1,
 		.tm_mon		=  0,
-		.tm_year	= 2023,
+		.tm_year	= 2023 - 1900,
 
 		.tm_isdst	= -1,
 	};

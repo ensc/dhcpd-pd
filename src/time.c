@@ -92,7 +92,7 @@ uint32_t time_max_lt(time_t now, int daily_renew)
 	localtime_r(&now, &tm);
 
 	pr_debug("now=%04u-%02u-%02u %02u:%02u:%02u; renew=%04u",
-		 tm.tm_year, tm.tm_mon, tm.tm_mday,
+		 tm.tm_year + 1900, tm.tm_mon, tm.tm_mday,
 		 tm.tm_hour, tm.tm_min, tm.tm_sec,
 		 daily_renew);
 
