@@ -18,6 +18,7 @@
 
 #include <assert.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include "../src/time.h"
 
 /* XXX: keep it synchronized with time.c */
@@ -138,11 +139,60 @@ static void test_03(void)
 	/* TODO: check DST wrap */
 }
 
+static void test_04(void)
+{
+	struct tm	tm = {
+		.tm_sec		= 59,
+		.tm_min		= 58,
+		.tm_hour	=  3,
+
+		.tm_mday	= 31,
+		.tm_mon		= 11,
+		.tm_year	= 2023 - 1900,
+
+		.tm_isdst	= -1,
+	};
+
+	time_t		now = mktime(&tm);
+
+	assert(time_max_lt(now,  -1) == 0);
+	assert(time_max_lt(now, 500) == 1 * 3600 + 1 * 60 + 1  +  EXTRA_DAILY_TM);
+	assert(time_max_lt(now, 100) == 25 * 3600 + EXTRA_DAILY_TM - (3 * 3600 + 58 * 60 + 59));
+}
+
+static void test_05(void)
+{
+	/* CEST -> CET DST change */
+
+	/* Sat Mar 25 12:00:00 CET 2023 */
+	assert(time_max_lt(1679742000, 500) == 1679799600 - 1679742000 + EXTRA_DAILY_TM);
+
+	/* Sun Mar 26 01:00:00 CET 2023 */
+	assert(time_max_lt(1679788800, 500) == 1679799600 - 1679788800 + EXTRA_DAILY_TM);
+
+	/* Sun Mar 26 12:00:00 CEST 2023 */
+	assert(time_max_lt(1679824800, 500) == 1679886000 - 1679824800 + EXTRA_DAILY_TM);
+
+
+	/* Sat Oct 28 12:00:00 CEST 2023 */
+	assert(time_max_lt(1698487200, 500) == 1698552000 - 1698487200 + EXTRA_DAILY_TM);
+
+	/* Sun Oct 29 01:00:00 CEST 2023 */
+	assert(time_max_lt(1698534000, 500) == 1698552000 - 1698534000 + EXTRA_DAILY_TM);
+
+	/* Sun Oct 29 12:00:00 CET 2023 */
+	assert(time_max_lt(1698577200, 500) == 1698638400 - 1698577200 + EXTRA_DAILY_TM);
+}
+
 #undef main
 int main(void)
 {
+	setenv("TZ", "Europe/Berlin", 1);
+
 	test_00();
 	test_01();
 	test_02();
 	test_03();
+	test_04();
+	test_05();
 }
