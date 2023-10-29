@@ -91,9 +91,9 @@ uint32_t time_max_lt(time_t now, int daily_renew)
 
 	localtime_r(&now, &tm);
 
-	pr_debug("now=%04u-%02u-%02u %02u:%02u:%02u; renew=%04u",
+	pr_debug("now=%04u-%02u-%02u %02u:%02u:%02u %s; renew=%04u",
 		 tm.tm_year + 1900, tm.tm_mon, tm.tm_mday,
-		 tm.tm_hour, tm.tm_min, tm.tm_sec,
+		 tm.tm_hour, tm.tm_min, tm.tm_sec, tm.tm_zone,
 		 daily_renew);
 
 	renew_tm = get_hhmm(&tm, daily_renew, 0);
